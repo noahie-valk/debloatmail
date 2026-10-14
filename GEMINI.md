@@ -1,4 +1,4 @@
-# Project: debloatmail — a lightweight Linux desktop email + RSS/Atom client written in Rust with a Qt6/Kirigami UI, built as a deliberately less-bloated alternative to Thunderbird.
+# Project: debloatmail: a lightweight Linux desktop email + RSS/Atom client written in Rust with a Qt6/Kirigami UI, built as a less-bloated and less-featured alternative to Thunderbird.
 
 ## Stack
 Rust (stable, pinned in `rust-toolchain.toml`) + Qt6/KF6 Kirigami (QML) + `KirigamiAddons` + `Ki18n`, bridged with cxx-qt on desktop; a UniFFI-exposed engine trait for Android
@@ -9,7 +9,7 @@ Processes: `debloatmail` (GUI), `debloatmaild` (daemon), `debloatmailctl` (CLI).
 Daemon: zbus, **two names** — `org.noahie.debloatmail` (GUI, activation) and `org.noahie.debloatmail.Daemon` (engine) · Build: CMake + ECM driving Cargo · Target: Linux (Android later, via `crates/ffi`)
 
 ## Commands
-- Deps: install Qt6, KF6 Kirigami (+ KirigamiAddons, Ki18n), ECM, and QtPdf dev packages (see README)
+- Deps: install Qt6, KF6 Kirigami (+ KirigamiAddons, Ki18n), ECM, and poppler/mupdf
 - Configure: `cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug`
 - Build all: `cmake --build build`
 - Rust only: `cargo build --workspace`
@@ -41,12 +41,11 @@ Daemon: zbus, **two names** — `org.noahie.debloatmail` (GUI, activation) and `
 - CI asserts the invariants, not just the tests: `crates/core` declares zero dependencies; no Qt dependency outside `ui/bridge`; `ffi` is Qt-free; `extract` has no runtime or I/O dependency; and the `ffi` binding suite passes against **both** transports — D-Bus under `dbus-run-session` against a real daemon binary, and in-process against a scratch database. Desktop production code never touches the in-process path, so an unexercised seam rots; the dual-transport run is what keeps the Android hedge honest.
 
 ## Boundaries
-- ✅ Always: run `cargo fmt` and `cargo clippy -- -D warnings` before finishing
-- ✅ Always: build `crates/cli` first — it is the engine's **first customer**: every hard path (auth, sync, send, feed ingest, extraction, search) runs end-to-end before any QML exists. The daemon owns the protocol; the CLI demonstrates it.
-- ⚠️ Ask first: adding any dependency to `crates/core` or `crates/extract`; changing the SQLite schema or migrations — the authoritative DDL is `DATA-MODEL.md` §5 (v3), which has absorbed the SYNC/MIME asks (`highestmodseq`, `consecutive_failures`, `role_source`, `extractor_version`, `section_id`, plus `hidden_at`, `pending_ops.public_id`, the `meta` revision counter, and `accounts.name UNIQUE`); future schema changes remain ask-first; adding a Qt type outside `ui/bridge`
-- ⚠️ Ask first: implementing OAuth (the architecture is planned; implementation is deferred until engine + UI skeleton are done)
-- 🚫 Never: use `io-email` (frozen) or `io-keyring` (deprecated)
-- 🚫 Never: open HTTP or TLS outside `crates/feeds` — no `ureq`, no direct `hyper`, no curl shim
-- 🚫 Never: add a WebView, an HTML renderer, or calendar/contacts code
-- 🚫 Never: commit credentials, tokens, or real email/feed data into `tests/fixtures/`
-- 🚫 Never: add Nix packaging — deliberately out of scope
+- Always: run `cargo fmt` and `cargo clippy -- -D warnings` before finishing
+- Always: build `crates/cli` first — it is the engine's **first customer**: every hard path (auth, sync, send, feed ingest, extraction, search) runs end-to-end before any QML exists. The daemon owns the protocol; the CLI demonstrates it.
+- Ask first: adding any dependency to `crates/core` or `crates/extract`; changing the SQLite schema or migrations — the authoritative DDL is `DATA-MODEL.md` §5, which has absorbed the SYNC/MIME asks (`highestmodseq`, `consecutive_failures`, `role_source`, `extractor_version`, `section_id`, plus `hidden_at`, `pending_ops.public_id`, the `meta` revision counter, and `accounts.name UNIQUE`); future schema changes remain ask-first; adding a Qt type outside `ui/bridge`
+- Ask first: implementing OAuth (the architecture is planned; implementation is deferred until engine + UI skeleton are done)
+- Never: use `io-email` (frozen) or `io-keyring` (deprecated)
+- Never: open HTTP or TLS outside `crates/feeds` — no `ureq`, no direct `hyper`, no curl shim
+- Never: add a WebView, an HTML renderer, or calendar/contacts code
+- Never: commit credentials, tokens, or real email/feed data into `tests/fixtures/`
