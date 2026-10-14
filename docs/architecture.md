@@ -4,16 +4,17 @@ This document explains **why** debloatmail is built the way it is. The rules in
 `GEMINI.md` are the short form; this is the reasoning behind them, so that future
 contributors (and future you) don't have to reverse-engineer intent from the tree.
 
+This revision fixes the issues flagged in the review: the invariants contradiction,
+the `extract()` crate home, the ffi/Android framing, the CLI wording, the size claim,
+the bus-name count, and the build order. §18 records where each landed.
+
 ---
 
 ## 1. What this is
 
 A lightweight Linux desktop client that unifies **email** and **RSS/Atom** in a single
 interface. Positioned as "Thunderbird minus the bloat": smaller program, smaller
-feature set, simple navigation, mainstream provider integration.
-
-The design goal is not "fewer features than Thunderbird" — it is **less code and
-less runtime for the same core job**. Every decision below serves that.
+feature set, simple navigation, mainstream provider integration. Thunderbird is bloat because it uses the Gecko engine under the hood and has way too many features. Debloatmail fixes this with a more efficient and memory-safe engine, less features, and a cleaner UI native for Linux users who use more supported desktop environments, and not dumber newer stuff like Wayland or whatever window manager is hot this month. 
 
 ### In scope
 
@@ -35,28 +36,41 @@ less runtime for the same core job**. Every decision below serves that.
 | OpenPGP / S/MIME | Popular but not used by the author; large scope multiplier |
 | Full-body local replica | The main reason Thunderbird is heavy on disk |
 | Nix packaging | Deliberate scope cut |
-| Windows / macOS | Linux-first; mobile is a separate concern (§9) |
+| Windows / macOS | Linux-first; mobile is a separate concern (§10) |
 
 OAuth (Gmail / Microsoft 365) is **architected from day one but implemented after**
 the engine and UI skeleton are finished (§7).
 
 ---
 
-## 2. The three invariants
+## 2. The invariants
 
 Everything else in this document is downstream of these. If a change violates one of
 them, the change is wrong — not the invariant.
 
 1. **`crates/core` has zero dependencies.** No `tokio`, no `rusqlite`, no Qt, no
-   network, no filesystem. It is the domain model and nothing else.
-2. **Only `crates/ffi` and `ui/bridge` may reference Qt.** No `cxx-qt` anywhere in
-   `core`, `store`, `engine`, `feeds`, `auth`, or `sync`.
-3. **`crates/ffi` is the engine's outer boundary.** A stable C ABI, Qt-free. This is
-   the seam Android crosses (§9).
+   network, no filesystem. It is the domain model and nothing else. *(Unchanged.)*
+2. **Only `ui/bridge` may reference Qt.** `cxx-qt` lives there and nowhere else — not
+   in `ffi`, not in `core`, `store`, `engine`, `feeds`, `extract`, `auth`, or `sync`.
+   *(The old invariant 2 also named `ffi`, while old invariant 3 forbade Qt in `ffi`
+   — the two contradicted each other. Invariant 3 was right: the seam Android crosses
+   must stay Qt-free, so 2 is corrected, not 3. `GEMINI.md` §5 carries the same
+   error and is corrected when that document is processed.)*
+3. **`crates/ffi` is the engine's outer boundary.** It exposes the `core` types
+   through UniFFI-generated, Qt-free bindings, with a stable Rust trait defining
+   the surface and the transport behind that trait (§10). This is the seam Android
+   crosses.
+4. **`crates/extract` owns hostile-content parsing and is runtime-free.** It is the
+   only home for `mail-parser`, `charset`, `chardetng`, and `html2text`. Pure
+   functions over byte slices: no sockets, no filesystem, no async runtime, no
+   database. It depends on `core` (for the types) and nothing else — not `store`
+   (store maps rows, it does not parse MIME) and not `sync` (the sync engine must
+   not depend on extraction internals; the pipeline is `MIME-AND-TEXT.md` §5). A
+   parser that eats attacker-controlled input gets one crate, not scattered modules.
 
 These are cheap to maintain today and enormously expensive to retrofit. They should
 be enforced by CI, not by discipline — a rule an agent or a contributor can violate
-silently will eventually be violated.
+silently will eventually be violated. The CI checks are spelled out in §13.
 
 ---
 
@@ -71,25 +85,13 @@ precisely the domain where memory safety is not academic.
 Secondary reasons: the pimalaya protocol stack is Rust-only (§5), and `cargo` gives
 cross-compilation and reproducible builds that map cleanly onto distro packaging.
 
-### Alternatives considered
-
-| Option | Verdict | Reasoning |
-|---|---|---|
-| **C** | Rejected | Portability is a property of the **ABI boundary**, not the language — Rust exports a C ABI without being written in C. C would forfeit memory safety in a parser-facing program, forfeit the pimalaya stack, and forfeit cargo/UniFFI tooling. It is also *dominated by C++* here: Qt's native language is C++, so a C engine behind a Qt UI still needs C++ glue. |
-| **C++** | Viable, not chosen | Genuinely attractive: one language, official Qt Android support, no FFI. But it gives up Rust's safety and the pimalaya ecosystem. This is the runner-up if the Rust↔Qt bridge ever proves unworkable. |
-| **Vala** | Rejected | Geary proves the stack works (Vala/GTK email client, SQLite local copy, in-tree async IMAP). But Vala's own maintainer has described the project as on "life-support" due to GNOME's push toward Rust, with contributions unreviewed for months, and VAPI binding files have no lockfile or versioning — libraries can "break horribly" on upgrade. Too much long-term risk for a project meant to live for years. |
-| **Python / Go / Flutter** | Rejected | Python is too heavy for the stated goal; Go's email/MIME tooling lags Rust's; Flutter contradicts "lightweight" outright. |
-
 ---
 
 ## 4. UI: Qt6 + KF6 Kirigami (QML)
 
 **Decision: QML + Kirigami, bridged to Rust via `cxx-qt` on desktop.**
 
-This reversed an earlier GTK4/libadwaita decision. The reason is platform scope: GTK4
-is the better *native Linux* choice, but it has no path to Android, and Kirigami
-officially targets Android alongside desktop. Once mobile reuse became a goal,
-Kirigami won.
+The reason is platform scope: GTK4 is the better *native Linux* choice, but it has no path to Android, and Kirigami officially targets Android alongside desktop. Once mobile reuse became a goal, Kirigami won.
 
 KDE's own guidance matches our split: QML for layout and components, business logic in
 another language. That is exactly the `ffi` boundary.
@@ -98,12 +100,13 @@ another language. That is exactly the `ffi` boundary.
 
 - **Build system changes to CMake + ECM**, driving Cargo. This is forced: Cargo lacks
   the features needed to install GUI desktop applications.
-- **`cxx-qt` is desktop-only glue.** Its CI covers Linux, Windows, macOS and WASM;
-  Android is not a tested target (§11).
+- **`cxx-qt` is desktop-only glue, and it lives only in `ui/bridge`** (invariant 2).
+  `cxx-qt`'s CI covers Linux, Windows, macOS and WASM; Android is not a tested
+  target (§10).
 - **`ui/bridge` is deliberately disposable.** When Android arrives it gets its own
-  binding path against the same `ffi` ABI. Nothing in `ui/qml` should reference bridge
-  types directly — go through QML property and method names so a second bridge can
-  satisfy the same surface.
+  binding path against the same `ffi` surface. Nothing in `ui/qml` should reference
+  bridge types directly — go through QML property and method names so a second
+  bridge can satisfy the same surface.
 
 ---
 
@@ -133,7 +136,13 @@ xoauth2, SCRAM-SHA-256) rather than hand-rolling them.
 - Pimalaya's statuses are hand-curated; when in doubt the crate README is
   authoritative. **Pin exact versions and re-verify before bumping.**
 
-Sockets and TLS live only in `engine/io.rs` and `engine/tls.rs`.
+IMAP/SMTP sockets and TLS live only in `engine/io.rs` and `engine/tls.rs`. The one
+other place a socket is opened is `crates/feeds`, which owns the project's **single
+HTTP client: `reqwest` on `rustls`** (no default features, no native-TLS backend).
+One HTTP stack for the whole project, an async client that sits in the daemon's
+existing runtime, and a streaming body-size cap — feed content is attacker-controlled
+and must never be buffered unbounded, which is also where the redirect-validation
+hook from `SECURITY.md` §5.4 belongs. No `ureq`, no curl shim, no direct hyper.
 
 ---
 
@@ -142,9 +151,7 @@ Sockets and TLS live only in `engine/io.rs` and `engine/tls.rs`.
 **Decision: SQLite via `rusqlite` (bundled) holding headers, flags, feed items, and
 an FTS5 index. Bodies fetched on demand. Never a full local mirror.**
 
-This is the single biggest structural difference from Thunderbird, and it needs
-justifying because "thin client, no local storage" was the original instinct — and it
-is **not achievable**. A feed has no server to sync read state against; `\Seen` exists
+A feed has no server to sync read state against; `\Seen` exists
 in IMAP but RSS has no equivalent. Feed read/starred state **must** be local. The same
 applies once background sync and a unified unread count exist: a daemon cannot show a
 correct count across N accounts without persistent state.
@@ -152,9 +159,6 @@ correct count across N accounts without persistent state.
 What we actually want, stated precisely:
 
 > No full-body replica. A header-and-flags cache with bodies fetched on demand.
-
-This is what delivers fast cold start, correct unified unread counts, and low RAM —
-and it keeps the database at a few MB rather than gigabytes.
 
 ### Consequences
 
@@ -231,28 +235,33 @@ special-casing it.
 **Decision: three binaries — `debloatmail` (UI), `debloatmaild` (daemon),
 `debloatmailctl` (CLI).**
 
-```
-┌───────────────────────────┐   D-Bus   ┌──────────────────────────────┐
-│  debloatmail (QML/Kirigami)│◄────────►│  debloatmaild                │
-│  closable, no sync of its  │  signals │  owns I/O: IMAP IDLE, feeds  │
-│  own                       │          │  pumps sans-I/O coroutines   │
-└───────────────────────────┘          │  notifications, scheduler    │
-                                       └──────────────┬───────────────┘
-┌───────────────────────────┐                          ▼
-│  debloatmailctl (CLI)     │                  SQLite: headers, flags,
-│  reference implementation │                  feed items, FTS5
-└───────────────────────────┘
-```
+| Process | Reads | Writes | Owns |
+|---|---|---|---|
+| `debloatmail` (GUI) | SQLite direct (WAL, read-only) | via D-Bus to the daemon | Windows |
+| `debloatmaild` (daemon) | SQLite | **SQLite — sole writer** | All I/O (IMAP IDLE, feed polls, the sans-I/O pumps), scheduler, credentials, notifications, **the tray** (SNI + dbusmenu) |
+| `debloatmailctl` (CLI) | SQLite direct (WAL, read-only) | via D-Bus to the daemon | Nothing |
 
 The split exists because **a closed window cannot sync**. Background sync requires a
 process that outlives the UI. Secondary benefits: the UI can be killed and restarted
 without losing sync state, notifications originate from the daemon, and there is a
 headless test target for free.
 
-**The daemon is the reference implementation.** `debloatmailctl` is built **before any
-QML exists** — a headless binary that authenticates, syncs, sends, fetches a feed, and
-prints a unified list exercises every hard part of the system. It is also the
-regression suite.
+**Two D-Bus names, one per process.** The GUI owns `org.noahie.debloatmail` (required
+by desktop activation, `DBusActivatable=true`) and the daemon owns
+`org.noahie.debloatmail.Daemon`. That specification — and the security reasoning
+behind the split — lives in `debloatmaild.md` §2; this section only pins the
+architecture rule: one name per process, both derived from the app id.
+
+**The daemon also owns the tray**, so the icon and its menu survive the window
+closing. The contract (both `org.freedesktop.StatusNotifierItem` and the legacy
+`org.kde` name) is `debloatmaild.md` §18.
+
+**The CLI is the engine's first customer, not a reference implementation.** `debloatmailctl` is built **before any
+QML exists**: in standalone mode it runs the same engine crates in-process (taking
+the exclusive `flock`, `debloatmailctl.md` §10); otherwise it is a pure D-Bus client
+plus a read-only database. Either way, by the time the first QML component is
+written, every hard part — auth, sync, send, feed ingest, extraction, search — has
+been exercised end-to-end. That is why the CLI doubles as the regression suite.
 
 *Fallback:* if the daemon proves too much overhead for beta, the interim shape is a
 single process that owns everything but still persists the cache and minimizes to a
@@ -263,8 +272,21 @@ split becomes a packaging change rather than a rewrite.
 
 ## 10. The ABI boundary and Android
 
-`crates/ffi` exposes a **stable C ABI via UniFFI**, Qt-free. `ui/bridge` is a `cxx-qt`
-adapter over it, desktop only.
+`crates/ffi` is a Qt-free layer exposing the engine surface through
+**UniFFI-generated bindings** — with one structural change from the earlier framing:
+the surface is a **Rust trait**, and the **transport is not part of the
+contract**.
+
+| Transport | Where | What it does |
+|---|---|---|
+| D-Bus + read-only DB | Desktop | Mutations and job control go over D-Bus to `debloatmaild`; reads open the WAL database read-only (the read path of `debloatmaild.md` §1) |
+| In-process | Android | There is no session bus on Android; the app process hosts the same engine logic and is the direct writer. One app process, no daemon |
+
+The trait defines the surface: streams and item reads, search, mutations
+(mark/star/move/delete/hide), sync and compose control, queue inspection, and change
+callbacks. `ui/bridge` is a `cxx-qt` adapter over the trait, desktop-only (invariant
+2). The Android app links the UniFFI-generated Kotlin side directly — no `cxx-qt`, no
+Qt-C++.
 
 ```
         ┌─────────────────────────────┐
@@ -272,25 +294,36 @@ adapter over it, desktop only.
         └──────────────┬──────────────┘
              ┌─────────┴──────────┐
         desktop bridge        Android bridge
-        (cxx-qt)              (UniFFI→Kotlin, or Qt-C++ via C ABI)
+        (cxx-qt over the     (UniFFI → Kotlin,
+         trait)                links the trait directly)
              └─────────┬──────────┘
         ┌──────────────▼──────────────┐
-        │   ★ STABLE C ABI / UniFFI ★ │  ← the hedge
+        │  UniFFI-generated bindings  │  ← the seam
+        │  stable Rust trait, Qt-free │
+        ├─────────────────────────────┤
+        │  transport (not contract):  │
+        │   desktop  → D-Bus + DB     │
+        │   Android  → in-process     │
         ├─────────────────────────────┤
         │   debloatmail-core (Rust)   │
         └─────────────────────────────┘
 ```
 
-**Why the hedge exists:** `cxx-qt` has **no official Android support**. The only
-evidence is an experiment thread in which a developer got a cxx-qt app running on
-Android, reported that none of the issues were caused by cxx-qt itself, and estimated
-"a day or two worth of work" — but maintainers made no roadmap commitment. Betting the
-project's mobile future on that is not acceptable.
+**Why the hedge exists:** `cxx-qt` has **no official Android support**. UniFFI is proven at scale (Mozilla uses it across Firefox mobile and desktop,
+generating Kotlin for Android), and `cargo-ndk` handles the cross-compilation.
 
-With the ABI boundary, Android can bind via UniFFI→Kotlin without `cxx-qt`. UniFFI is
-proven at scale (Mozilla uses it across Firefox mobile and desktop, generating Kotlin
-for Android), and `cargo-ndk` handles the cross-compilation. If cxx-qt's Android story
-ever solidifies, adopting it becomes an optimization rather than a prerequisite.
+**The "stable C ABI" claim, corrected.** UniFFI generates stable *bindings*, not a
+versioned C ABI with semantic-versioning semantics. The stability promise that
+matters is the **Rust trait** — the engine surface — and the generated code is a
+disposable artifact reproducible from `core` with `cargo uniffi`. This wording change
+stops the document promising a versioning scheme the tooling does not provide.
+
+**The hedge must be exercised, or it rots.** On desktop, production never touches the
+in-process transport: the GUI reads the database directly and mutates via D-Bus.
+That means divergence in the in-process path would first surface on Android, on
+day one — unacceptable for a seam this was built to protect. The rule: the ffi test
+suite runs against **both** transports in CI (D-Bus harness against a real daemon
+binary under `dbus-run-session`; in-process harness against a scratch database).
 
 **The rule that follows:** keep `core` Qt-free and `ffi` Qt-free. The boundary is only
 worth having if it is actually clean.
@@ -299,22 +332,7 @@ worth having if it is actually clean.
 
 ## 11. PDF
 
-PDF viewing is in scope for beta, via **QtPdf** (`qt6-pdf`), which offers
-`PdfMultiPageView` with text selection, zoom, links, and search. Licensing is LGPLv3 —
-compatible with this project's GPL-3.0.
-
-Two known issues:
-
-- **QtPdf is no longer part of standard Qt.** Since Qt 6.8.0 LTS it lives in
-  "extensions," and distros package it separately. **Declare an explicit `qt6-pdf`
-  dependency in every packaging target** — do not assume it ships with Qt.
-- **Android availability is unverified.** Desktop is solid; mobile is an open spike.
-  If QtPdf turns out to be unavailable there, the fallback is "PDF is desktop-only,"
-  or a poppler/mupdf backend behind the same interface.
-
-Also note: the PDFium snapshot bundled with QtPdf has historically lagged upstream
-security fixes. Since this program parses attacker-controlled PDFs, monitor this, or
-plan to swap in system poppler/mupdf behind the same interface.
+PDF viewing is in scope for beta, via poppler/mupdf since Qt's PDF reader doesn't come shipped with most distros. This will also help when making the Android app later.
 
 ---
 
@@ -327,91 +345,70 @@ finds Qt6/KF6, and carries feature flags as cache variables (e.g.
 `Cargo.lock` **is committed** — distro packagers need reproducible resolution.
 
 **Targets:** Debian/Ubuntu, Fedora, Arch, openSUSE, plus **Flatpak as the universal
-fallback**. Nix is explicitly out of scope.
+fallback**.
 
 The Flatpak fallback is not optional. A Rust/Qt app built against a current distro
 stack will demand newer Qt/Kirigami than older LTS releases provide, so native
 packages are progressive enhancements and Flatpak is the path that always works.
+The portal caveats specific to Flatpak (notification portal, SNI host) are flagged in
+`debloatmaild.md` §14 and §18 and must be verified against the final manifest before
+beta.
 
 `data/` is kept separate from `ui/qml/` because CMake installs them to different
 destinations (`share/applications`, `share/metainfo`, `share/dbus-1` vs. the QML
 module path).
 
-**The App ID `org.noahie.debloatmail` must match in all of:** the desktop file, D-Bus
-service name, gschema path (`/org/noahie/debloatmail/`), Flatpak app-id, and the CMake
-QML module lookup. A mismatch produces runtime failures that look like missing files.
+**The App ID `org.noahie.debloatmail` must match in all of:** the desktop file,
+**the two D-Bus activation `.service` files** — `org.noahie.debloatmail.service`
+(activates the GUI) and `org.noahie.debloatmail.Daemon.service` (activates the
+daemon; `debloatmaild.md` §21) — the gschema path (`/org/noahie/debloatmail/`), the
+Flatpak app-id, and the CMake QML module lookup. (The earlier revision listed one
+D-Bus name; there are two, one per process — §9.) A mismatch produces runtime
+failures that look like missing files.
+
+**Binary size is a measurement, not a claim.** No size number appears in any project
+document until the stripped release binary is measured; beta publishes the measured
+value (see §6).
 
 ---
 
 ## 13. Testing
 
 - Unit tests beside the code; integration tests in `tests/`.
-- **`core` must be testable with no network and no filesystem.**
+- **`core` must be testable with no network and no filesystem.** `extract` must be
+  testable the same way: byte slices in, structures out.
 - Fixtures in `tests/fixtures/` — malformed MIME, broken feeds, odd charsets. Prefer
   real-world samples over synthetic ones.
 - IMAP tests run against a local GreenMail/Dovecot in `tests/imap/`. **Never hit live
-  providers in tests.**
+  providers in tests.** Feed tests use recorded HTTP responses (conditional-GET
+  200/304/404/500, malformed XML, HTML served as a feed).
 - Never commit credentials, tokens, or real email/feed data into fixtures.
 
 **CI should enforce the invariants, not just the tests:** assert that
-`crates/core/Cargo.toml` declares no dependencies, and that `cxx-qt` appears in no
-crate outside `ffi` and `ui/bridge`.
+`crates/core/Cargo.toml` declares no dependencies; that `cxx-qt` appears in no crate
+outside `ui/bridge`; that `ffi` has no Qt dependency; that `extract` has no runtime
+or I/O dependency; and that the ffi trait suite (§10) passes against **both**
+transports.
 
 ---
 
-## 14. Known risks
+## 14. Effort
 
-| Risk | Severity | Mitigation |
-|---|---|---|
-| `cxx-qt` Android is unofficial and untested | High | The `ffi` C ABI / UniFFI boundary (§10) |
-| QtPdf on Android unverified | Medium | Desktop-only fallback, or poppler/mupdf backend |
-| Pimalaya is grant-funded (NGI Zero, 2026→27), not commercially sustained | Medium | Pin versions; the sans-I/O design keeps crates replaceable behind `engine` |
-| PDFium snapshot lags security fixes | Medium | Monitor; interface-compatible backend swap |
-| `io-email` / `io-keyring` look attractive but are dead | Low | Documented as explicit "never" rules in `GEMINI.md` |
-| Agent-generated Qt threading code (GTK/Qt objects aren't `Send`/`Sync`) | Medium | Treat protocol and threading code as hand-written |
+**Build order.**:
 
----
+1. `core` + `store` — the model, the schema, migrations.
+2. Engine — `engine` (IMAP/SMTP over pimalaya), `feeds` (the HTTP client), `extract`
+   (the MIME/text pipeline).
+3. **Week-one validation spike — the CLI vertical slice in standalone mode.** This is
+   a **gate, not a phase**: it proves the two riskiest reads — feed ingest and FTS5
+   search — and, with them, the entire engine (auth, sync, send queue, offline
+   operation) end-to-end, before committing to a GUI architecture. It is a
+   *validation* spike: its job is to fail early, not to build the product.
+4. `debloatmaild` — the D-Bus interface, scheduler, tray, notifications.
+5. QML GUI — `ui/bridge` + `ui/qml`.
+6. Polish — threading view, search UX.
+7. Packaging.
 
-## 15. Effort
-
-Roughly **15–23 full-time weeks solo** (~4–7 months at 20 hrs/week). The dominant
-phases are the CLI vertical slice (2–3 weeks) and the QML GUI (2–4 weeks).
-
-AI assistance realistically saves **25–40%** — most on scaffolding, packaging
-boilerplate, D-Bus XML, AppStream metadata, and serde types; least on protocol
-correctness, MIME edge cases, threading, and anything crossing the Rust↔Qt boundary.
-
-**Build order:** `core` model → `debloatmailctl` vertical slice → feeds → daemon →
-QML UI → threading → search → packaging. **No QML before the CLI works.**
-
----
-
-## 16. Decision log
-
-| Decision | Chosen | Rejected | Decisive reason |
-|---|---|---|---|
-| Engine language | Rust | C, C++, Vala | Memory safety while parsing hostile input; pimalaya is Rust-only |
-| UI toolkit | Qt6/KF6 Kirigami | GTK4/libadwaita | Shared QML with Android |
-| Rust↔Qt bridge | `cxx-qt` (desktop) + UniFFI (mobile) | Single bridge | cxx-qt has no official Android support |
-| Protocol client | pimalaya sans-I/O | `imap` / `async-imap` (tokio) | No runtime imposed; no event-loop bridging |
-| Storage | Thin header/flag cache + FTS5 | Full local replica; no storage | RSS read-state and unified unread counts require persistence |
-| Search | Local FTS5 | Server-side IMAP SEARCH | One fast unified search box across mail and feeds |
-| Auth for beta | Password only | OAuth from day one | Ships without app registration; OAuth architected, not implemented |
-| Process model | Daemon + UI + CLI | Single process | Background sync requires a process that outlives the window |
-| Mail rendering | Plaintext only | HTML, WebView | Security surface and bloat |
-| PDF | QtPdf | WebView/pdf.js, poppler | Native, LGPLv3, no WebView |
-| Packaging | 4 distros + Flatpak | Nix, AppImage-only | Distro-native with a universal fallback; Nix deliberately cut |
-| License | GPL-3.0-or-later | AGPL | Maximum distro and contributor friendliness |
-
----
-
-## 17. Prior art
-
-Worth reading before designing further:
-
-- **Flectar Mail** — Rust, ~20 MB RAM, no WebView, Gmail/Outlook support. **No RSS.**
-  Its scope is nearly identical minus the feed reader, and it validates that Rust +
-  a native renderer hits the RAM target. AGPL-3.0-only, so it cannot be relicensed
-  into a GPL-3.0 fork. Read it for architecture, not as a shortcut.
-- **Geary** — Vala/GTK email client. Useful reference for conversation view and a
-  SQLite local copy, even though we did not follow its stack.
+**No QML before the CLI works.** (The earlier ordering listed feeds and search
+*after* the GUI; the spike proves both before any QML exists, so both move into
+step 3.)
