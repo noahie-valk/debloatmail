@@ -1,4 +1,6 @@
-# debloatmail: a lightweight Linux desktop email + RSS/Atom client written in Rust with a Qt6/Kirigami UI, built as a less-bloated and less-featured alternative to Thunderbird.
+# debloatmail 
+
+A lightweight Linux desktop email + RSS/Atom client written in Rust with a Qt6/Kirigami UI, built as a less-bloated and less-featured alternative to Thunderbird.
 
 ## Stack
 Rust (stable, pinned in `rust-toolchain.toml`) + Qt6/KF6 Kirigami (QML) + `KirigamiAddons` + `Ki18n`, bridged with cxx-qt on desktop; a UniFFI-exposed engine trait for Android
