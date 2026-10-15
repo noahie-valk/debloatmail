@@ -1,0 +1,7 @@
+[package]
+name = "debloatmail-core"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+# INVARIANT 1: crates/core has ZERO dependencies.

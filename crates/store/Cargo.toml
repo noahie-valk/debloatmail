@@ -1,0 +1,9 @@
+[package]
+name = "debloatmail-store"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+debloatmail-core = { workspace = true }
+rusqlite = { workspace = true }
+thiserror = { workspace = true }

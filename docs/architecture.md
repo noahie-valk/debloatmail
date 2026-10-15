@@ -361,7 +361,7 @@ module path).
 **The App ID `org.noahie.debloatmail` must match in all of:** the desktop file,
 **the two D-Bus activation `.service` files** — `org.noahie.debloatmail.service`
 (activates the GUI) and `org.noahie.debloatmail.Daemon.service` (activates the
-daemon; `debloatmaild.md` §21) — the gschema path (`/org/noahie/debloatmail/`), the
+daemon; `debloatmaild.md` §21) — the
 Flatpak app-id, and the CMake QML module lookup. (The earlier revision listed one
 D-Bus name; there are two, one per process — §9.) A mismatch produces runtime
 failures that look like missing files.

@@ -1,0 +1,3 @@
+Name=org.noahie.debloatmail.Daemon
+Exec=/usr/bin/debloatmaild
+SystemdService=debloatmaild.service

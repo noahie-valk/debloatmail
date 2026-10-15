@@ -1,0 +1,16 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/core",
+    "crates/store",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+
+[workspace.dependencies]
+debloatmail-core = { path = "crates/core" }
+debloatmail-store = { path = "crates/store" }
+rusqlite = { version = "0.32", features = ["bundled"] }
+thiserror = "2.0"
