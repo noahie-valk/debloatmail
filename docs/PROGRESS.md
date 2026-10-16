@@ -6,7 +6,7 @@ Phase 1 (`core` + `store`) is completed. We are currently implementing **Phase 2
 
 ---
 
-### 1. Work Completed in this Session
+### 1. Work Completed in the last Session
 
 #### A. Workspace & Dependencies
 - **Added `crates/extract` to root Cargo Workspace**: Updated root [Cargo.toml](file:///home/nvalk1/debloatmail/Cargo.toml) to include `"crates/extract"` in `[workspace.members]`.
