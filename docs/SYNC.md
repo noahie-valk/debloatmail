@@ -55,10 +55,10 @@ crates/auth        credentials, keyring, SASL
 
 **`sync` contains no sockets.** This is the consequence of the sans-I/O decision in
 `architecture.md` §5: pimalaya's `io-imap` is a set of I/O-free coroutine state machines
-that emit read and write requests instead of performing I/O [^0a3a99][^26871d]. The
+that emit read and write requests instead of performing I/O. The
 crate ships three feature-gated layers — the `no_std` coroutines, a light blocking client
-over `Stream: Read + Write`, and a full client that owns TCP and TLS [^64586a] — and it
-is built on `imap-codec`, re-exported as `codec` with `imap-types` as `types` [^fb1d68].
+over `Stream: Read + Write`, and a full client that owns TCP and TLS — and it
+is built on `imap-codec`, re-exported as `codec` with `imap-types` as `types`.
 
 **We use the coroutine layer, not the full client.** `engine/io.rs` owns the IMAP/SMTP
 socket and `engine/tls.rs` owns IMAP/SMTP TLS, per `architecture.md` §5. The pump:
