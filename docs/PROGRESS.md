@@ -1,64 +1,155 @@
 # Implementation Progress
 
-## Current Status: Step 1 Completed (`core` + `store`)
+## Current Status: Phase 2A in Progress (`crates/extract`)
 
-### 1. Toolchain & Workspace Configuration
-- **Rust Toolchain**: Configured [rust-toolchain.toml](file:///home/nvalk1/debloatmail/rust-toolchain.toml) pinning `channel = "1.93.0"`.
-- **Root Cargo Workspace**: Configured [Cargo.toml](file:///home/nvalk1/debloatmail/Cargo.toml) with resolver `2`, workspace inheritance, and shared dependencies (`rusqlite` bundled with FTS5, `thiserror`).
-- **Ignored Artifacts**: Updated [.gitignore](file:///home/nvalk1/debloatmail/.gitignore) for build outputs and caches.
-
-### 2. Domain Model (`crates/core`)
-- **Invariant 1 Preserved**: Strictly **zero external dependencies** in [crates/core/Cargo.toml](file:///home/nvalk1/debloatmail/crates/core/Cargo.toml).
-- **Identity & Tokens**:
-  - Implemented [`PublicId`](file:///home/nvalk1/debloatmail/crates/core/src/item.rs#L10) (validated UUIDv7 string) and strongly-typed newtypes ([`AccountId`](file:///home/nvalk1/debloatmail/crates/core/src/item.rs#L94), [`FolderId`](file:///home/nvalk1/debloatmail/crates/core/src/item.rs#L95), [`FeedId`](file:///home/nvalk1/debloatmail/crates/core/src/item.rs#L96), [`ThreadId`](file:///home/nvalk1/debloatmail/crates/core/src/item.rs#L97), [`DraftId`](file:///home/nvalk1/debloatmail/crates/core/src/item.rs#L98), [`OpId`](file:///home/nvalk1/debloatmail/crates/core/src/item.rs#L99)).
-  - Implemented standard lowercase snake_case enum wire tokens (`as_str` / `FromStr`) for [`ItemKind`](file:///home/nvalk1/debloatmail/crates/core/src/item.rs#L102), [`BodyState`](file:///home/nvalk1/debloatmail/crates/core/src/item.rs#L131), [`AccountKind`](file:///home/nvalk1/debloatmail/crates/core/src/account.rs#L7), [`AuthKind`](file:///home/nvalk1/debloatmail/crates/core/src/account.rs#L39), [`Security`](file:///home/nvalk1/debloatmail/crates/core/src/account.rs#L71), [`FolderRole`](file:///home/nvalk1/debloatmail/crates/core/src/mailbox.rs#L7), [`RoleSource`](file:///home/nvalk1/debloatmail/crates/core/src/mailbox.rs#L55), [`SortKey`](file:///home/nvalk1/debloatmail/crates/core/src/stream.rs#L8), [`OpKind`](file:///home/nvalk1/debloatmail/crates/core/src/message.rs#L7), and [`OpState`](file:///home/nvalk1/debloatmail/crates/core/src/message.rs#L45) per [docs/DATA-MODEL.md](file:///home/nvalk1/debloatmail/docs/DATA-MODEL.md) §14.
-- **Unified Items & Content Stream**:
-  - Implemented [`Item`](file:///home/nvalk1/debloatmail/crates/core/src/item.rs#L168) and [`Attachment`](file:///home/nvalk1/debloatmail/crates/core/src/item.rs#L186).
-  - Implemented [`StreamSpec`](file:///home/nvalk1/debloatmail/crates/core/src/stream.rs#L61), [`StreamSource`](file:///home/nvalk1/debloatmail/crates/core/src/stream.rs#L50), and pagination [`Cursor`](file:///home/nvalk1/debloatmail/crates/core/src/stream.rs#L40).
-  - Implemented [`Thread`](file:///home/nvalk1/debloatmail/crates/core/src/thread.rs#L5), [`Account`](file:///home/nvalk1/debloatmail/crates/core/src/account.rs#L85), [`Folder`](file:///home/nvalk1/debloatmail/crates/core/src/mailbox.rs#L80), [`Feed`](file:///home/nvalk1/debloatmail/crates/core/src/feed.rs#L5), [`PendingOp`](file:///home/nvalk1/debloatmail/crates/core/src/message.rs#L77), and [`Draft`](file:///home/nvalk1/debloatmail/crates/core/src/message.rs#L92).
-  - Domain error handling via [`CoreError`](file:///home/nvalk1/debloatmail/crates/core/src/error.rs#L5) using pure standard library types.
-
-### 3. Thin Cache & Storage (`crates/store`)
-- **Authoritative DDL**:
-  - Embedded schema in [crates/store/src/migrations/0001_init.sql](file:///home/nvalk1/debloatmail/crates/store/src/migrations/0001_init.sql) matching [docs/DATA-MODEL.md](file:///home/nvalk1/debloatmail/docs/DATA-MODEL.md) §5.
-  - Setup `visible_items` view over the spine items, mail items, and feed items, enforcing suppression (`hidden_at IS NULL`).
-  - Created `item_text` table with external-content FTS5 virtual table and synchronization triggers.
-- **Connection Management & Pragmas**:
-  - Implemented in [`schema.rs`](file:///home/nvalk1/debloatmail/crates/store/src/schema.rs): WAL mode, busy timeout (5000 ms), foreign keys enabled, normal synchronous mode, in-memory temp store.
-  - Schema version check rejecting databases newer than `CURRENT_SCHEMA_VERSION = 1`.
-  - Transaction-bound global revision incrementing ([`bump_revision`](file:///home/nvalk1/debloatmail/crates/store/src/schema.rs#L41) on `meta.revision`).
-- **Mail Headers & Unified Stream**:
-  - Implemented in [`headers.rs`](file:///home/nvalk1/debloatmail/crates/store/src/headers.rs): [`insert_mail_header`](file:///home/nvalk1/debloatmail/crates/store/src/headers.rs#L36) populating `items`, `mail_items`, and stub `item_text`.
-  - Body eviction ([`evict_mail_body`](file:///home/nvalk1/debloatmail/crates/store/src/headers.rs#L125)) clearing body while preserving subject and sender searchable in FTS5.
-  - Stream query execution ([`query_stream`](file:///home/nvalk1/debloatmail/crates/store/src/headers.rs#L182)) supporting all stream sources and cursor pagination across `Date`, `Received`, `Author`, and `Subject` sort keys.
-- **Feed Articles**:
-  - Implemented in [`feed_items.rs`](file:///home/nvalk1/debloatmail/crates/store/src/feed_items.rs): [`upsert_feed_item`](file:///home/nvalk1/debloatmail/crates/store/src/feed_items.rs#L51) matching on `(feed_id, guid)`, updating content while strictly preserving read, starred, and hidden states per §11.4.
-  - Excerpt derivation ([`derive_excerpt`](file:///home/nvalk1/debloatmail/crates/store/src/feed_items.rs#L22)) and title fallback ([`derive_title`](file:///home/nvalk1/debloatmail/crates/store/src/feed_items.rs#L37)).
-  - Soft-removal ([`soft_remove_feed`](file:///home/nvalk1/debloatmail/crates/store/src/feed_items.rs#L151)) keeping articles in stream and search; purge ([`purge_feed`](file:///home/nvalk1/debloatmail/crates/store/src/feed_items.rs#L161)) deleting spine and text rows.
-- **Flags & Offline Queue**:
-  - Implemented in [`flags.rs`](file:///home/nvalk1/debloatmail/crates/store/src/flags.rs): [`set_unread`](file:///home/nvalk1/debloatmail/crates/store/src/flags.rs#L7), [`set_starred`](file:///home/nvalk1/debloatmail/crates/store/src/flags.rs#L17), [`set_answered`](file:///home/nvalk1/debloatmail/crates/store/src/flags.rs#L27), [`set_hidden`](file:///home/nvalk1/debloatmail/crates/store/src/flags.rs#L37), and offline queueing via [`queue_flag_op`](file:///home/nvalk1/debloatmail/crates/store/src/flags.rs#L48).
-- **Search**:
-  - Implemented in [`search.rs`](file:///home/nvalk1/debloatmail/crates/store/src/search.rs): Query parser ([`parse_search_query`](file:///home/nvalk1/debloatmail/crates/store/src/search.rs#L26)) supporting closed operator set (`title:`, `author:`, `from:`, `is:mail`, `is:feed`, positional terms) with quote sanitization to prevent FTS5 syntax injection.
-  - Query execution ([`search_items`](file:///home/nvalk1/debloatmail/crates/store/src/search.rs#L77)) joining `visible_items` and `item_text_fts`.
-
-### 4. Verification & Quality Gates
-- **Tests**: `cargo test --workspace` passes (14 tests: 8 core unit tests, 6 store integration tests).
-- **Linting**: `cargo clippy --workspace --all-targets -- -D warnings` clean with zero warnings.
-- **Formatting**: `cargo fmt --all -- --check` clean.
+Phase 1 (`core` + `store`) is completed. We are currently implementing **Phase 2A (`crates/extract`)**, the pure, runtime-free MIME parsing and text extraction pipeline per [docs/architecture.md §2 Invariant 4](file:///home/nvalk1/debloatmail/docs/architecture.md#L63) and [docs/MIME-AND-TEXT.md](file:///home/nvalk1/debloatmail/docs/MIME-AND-TEXT.md).
 
 ---
 
-## Next Steps (Step 2: Engine Crates)
+### 1. Work Completed in this Session
 
-Per [docs/architecture.md](file:///home/nvalk1/debloatmail/docs/architecture.md) §14:
-1. **[`crates/extract`](file:///home/nvalk1/debloatmail/crates/extract)**:
-   - MIME parsing and plaintext extraction pipeline (pure byte slices in, structures out; depends on `core` only).
-   - Approved dependencies per Invariant 4: `mail-parser`, `charset`, `chardetng`, `html2text`, `thiserror`.
-2. **[`crates/feeds`](file:///home/nvalk1/debloatmail/crates/feeds)**:
-   - Feed polling and fetch client using `reqwest` on `rustls` (no default features).
-   - Feed parsing using `feed-rs`.
-3. **[`crates/engine`](file:///home/nvalk1/debloatmail/crates/engine)**:
-   - Sans-I/O IMAP and SMTP coroutine pumping using pimalaya (`io-imap`, `io-smtp`).
-   - Sockets and TLS in `engine/io.rs` and `engine/tls.rs`.
-4. **Step 3 (Validation Spike via [`crates/cli`](file:///home/nvalk1/debloatmail/crates/cli))**:
-   - Exercising auth, sync, send, feed ingest, and FTS5 search end-to-end prior to any GUI scaffolding.
+#### A. Workspace & Dependencies
+- **Added `crates/extract` to root Cargo Workspace**: Updated root [Cargo.toml](file:///home/nvalk1/debloatmail/Cargo.toml) to include `"crates/extract"` in `[workspace.members]`.
+- **Configured approved Invariant 4 dependencies**: Added locked workspace dependencies adhering strictly to Invariant 4 (pure byte slices in, structures out; zero async runtime, filesystem, database, or socket dependencies):
+  - `mail-parser = "0.11.9"` (RFC 5322 & MIME 2045–2049 parsing)
+  - `charset = "0.1.5"` (UTF-7, JavaMail labels, and legacy charsets over `encoding_rs`)
+  - `chardetng = "1.0.0"` (Sniffing fallback detector)
+  - `html2text = "0.17"` (HTML to plaintext parser on `html5ever`)
+  - `thiserror = "2.0"` (Workspace error derive)
+- **Configured [crates/extract/Cargo.toml](file:///home/nvalk1/debloatmail/crates/extract/Cargo.toml)** depending solely on `debloatmail-core` and the approved parsing libraries.
+
+#### B. Hostile-Content Parsing Modules (`crates/extract/src`)
+1. **[src/error.rs](file:///home/nvalk1/debloatmail/crates/extract/src/error.rs)**:
+   - Defined [`ExtractError`](file:///home/nvalk1/debloatmail/crates/extract/src/error.rs) (`OversizeMessage`, `ParseFailed`, `InvalidData`).
+2. **[src/limits.rs](file:///home/nvalk1/debloatmail/crates/extract/src/limits.rs)**:
+   - Implemented [`Limits`](file:///home/nvalk1/debloatmail/crates/extract/src/limits.rs) struct matching [docs/MIME-AND-TEXT.md §13](file:///home/nvalk1/debloatmail/docs/MIME-AND-TEXT.md#L701):
+     - `max_raw_message_size`: 25 MB
+     - `max_mime_nesting_depth`: 20
+     - `max_parts_per_message`: 500
+     - `max_extracted_body_size`: 1 MB
+     - `max_attachment_count`: 100
+     - `max_header_line_length`: 8 KB
+     - `max_single_header_value`: 64 KB
+     - `html_parser_node_budget`: 100k nodes
+     - `feed_response_size`: 10 MB
+3. **[src/charset.rs](file:///home/nvalk1/debloatmail/crates/extract/src/charset.rs)**:
+   - Implemented `decode_bytes` per §8 precedence:
+     1. BOM detection (UTF-8, UTF-16LE, UTF-16BE overriding declared charset).
+     2. Valid UTF-8 validation (catches mislabelled UTF-8).
+     3. Declared charset resolution via `charset::Charset::for_label` (decoding UTF-7, ISO-2022-JP, GB2312, Windows-1251, ISO-8859-*, etc.).
+     4. `chardetng::EncodingDetector` sniffing on the first ~1 KiB.
+     5. `windows-1252` fallback, never failing (decodes with U+FFFD replacement characters).
+4. **[src/flowed.rs](file:///home/nvalk1/debloatmail/crates/extract/src/flowed.rs)**:
+   - Implemented `unwrap_flowed` per RFC 3676 / RFC 2646 and §9:
+     - Quote depth counting and preservation.
+     - Space-stuffing stripping.
+     - Flowed line joining with trailing space handling (or space dropping when `delsp=yes`).
+     - Strict protection of signature separator `-- ` (never flowed).
+     - Isolation of differing quote depths from flowing together.
+5. **[src/html.rs](file:///home/nvalk1/debloatmail/crates/extract/src/html.rs)**:
+   - Implemented `html_to_plaintext` using `html2text` and custom `MailDecorator`:
+     - Element mappings per §10.3: `h1`–`h6` with no `#` markers, unordered lists with `- `, blockquote prefix `> `, verbatim `<pre>`, image alt text `[image: alt]` or `[image]`.
+     - Link formatting per §10.4: `text <URL>`, `mailto:` address normalization, omission when text matches URL, relative URL resolution against base URL (for feeds).
+     - Whitespace normalisation per §10.5: CRLF/CR to LF, collapsing spaces/tabs (except inside `<pre>`), stripping trailing whitespace on each line, collapsing 3+ newlines to 2, and stripping leading/trailing blank lines.
+6. **[src/header.rs](file:///home/nvalk1/debloatmail/crates/extract/src/header.rs)**:
+   - Implemented `normalize_subject` per §4.5 (stripping `Re:`, `Fwd:`, `AW:`, `SV:`, bracketed counters, lowercasing and collapsing whitespace for threading).
+   - Implemented `derive_author` producing display name `author` and structured `from_addr` without angle brackets (§4.4, §12.2).
+   - Implemented `extract_all_addresses` and `clean_msg_id` for `Message-ID`, `In-Reply-To`, and `References`.
+7. **[src/structure.rs](file:///home/nvalk1/debloatmail/crates/extract/src/structure.rs)**:
+   - Implemented recursive structure walk and RFC 3501 section numbering (`section_id`: `"1"`, `"2"`, `"1.1"`, `"2.1"`, etc.).
+   - Implemented attachment vs. body classification (§6.1) and selection precedence (§6.2):
+     - `multipart/alternative`: prefers `text/plain` if non-empty; falls back to `text/html`.
+     - `multipart/mixed`: first body candidate is body; subsequent candidates become attachments (§6.3).
+     - `multipart/encrypted`: placeholder `"[encrypted message]"` with `body_state = Cached`.
+     - `multipart/signed`: first part is content, signature part discarded.
+     - Opaque compressed `Content-Encoding` handling (warns, does not decompress, §7).
+     - Magic bytes verification (`%PDF-`) for `is_pdf` (§5.2, §15).
+     - Paragraph truncation for bodies exceeding 1 MB limit.
+     - Excerpt derivation (§12.3: first 200 chars of first non-empty paragraph).
+8. **[src/lib.rs](file:///home/nvalk1/debloatmail/crates/extract/src/lib.rs)**:
+   - Implemented `CURRENT_EXTRACTOR_VERSION = 1` (§18).
+   - Implemented `extract_feed_text` (§11) prioritizing `content` over `summary` and resolving relative links with `site_url`.
+
+---
+
+### 2. Cargo Test and Compilation Failures Encountered
+
+During development and test execution in `crates/extract`, the following compilation and test failures occurred:
+
+1. **`charset` Tuple Mismatch (`E0308`)**:
+   - *Error*: `cs.decode(bytes)` returned a 3-tuple `(Cow<'_, str>, Charset, bool)` rather than `(Cow<'_, str>, bool)`.
+   - *Fix*: Updated destructuring to `let (decoded, _, _) = cs.decode(...)`.
+2. **`chardetng 1.0.0` API Changes (`E0061`, `E0599`)**:
+   - *Error*: `EncodingDetector::new()` required argument `Iso2022JpDetection`, and `guess_assess` method did not exist.
+   - *Fix*: Used `EncodingDetector::new(chardetng::Iso2022JpDetection::Allow)` and `detector.guess(None, chardetng::Utf8Detection::Allow)`.
+3. **`html2text 0.17` Module Privacy (`E0603`)**:
+   - *Error*: Attempted to import `text_renderer` which is private in `html2text 0.17`.
+   - *Fix*: Imported `TaggedLine`, `TaggedLineElement`, and `TextDecorator` directly from `html2text::render::*`.
+4. **`html2text` Image Mode Method Name (`E0599`)**:
+   - *Error*: Called non-existent `.image_render_mode(...)` on `html2text::config::Config`.
+   - *Fix*: Switched to `.empty_img_mode(ImageRenderMode::ShowAlways)`.
+5. **`TaggedLineElement` Tag Vector Mismatch (`E0308`)**:
+   - *Error*: `html2text` decorates lines using a tag stack, returning `TaggedLineElement::Str(ts)` where `ts.tag` is `&Vec<MailAnnotation>` instead of `&MailAnnotation`.
+   - *Fix*: Updated line rendering to inspect the slice of annotations via `.iter().any(...)` and `.iter().find_map(...)`.
+6. **`derive_author` Match Arm Typing (`E0308`)**:
+   - *Error*: Incompatible types between match arms returning tuples vs empty unit `()`.
+   - *Fix*: Bound match expression to `Option<(Option<String>, Option<String>)>` and returned early when matched.
+7. **UTF-7 Test Character Mismatch**:
+   - *Error*: `test_utf7_decode` panicked expecting `Hello ☺!` when `+JgM-` decodes to snowman `Hello ☃!`.
+   - *Fix*: Corrected test assertion to expect `Hello ☃!`.
+8. **Missing Empty Alt Images in HTML**:
+   - *Error*: `<img src="bar.png">` with no alt text was dropped in `test_images_render`.
+   - *Fix*: Configured `Config::empty_img_mode(ImageRenderMode::ShowAlways)` so `decorate_image` is triggered for all image elements.
+9. **Whitespace Normalisation Indentation Loss in `<pre>`**:
+   - *Error*: `test_pre_preserves_whitespace` failed because `out.trim()` stripped leading spaces from the first preformatted line.
+   - *Fix*: Replaced `out.trim()` with `out.trim_matches(['\n', '\r'])` adhering to §10.5 Step 5 ("Strip leading and trailing blank lines").
+10. **`Attribute` Struct Access in `mail_parser` (`E0308`)**:
+    - *Error*: Treated `Attribute` as tuple `(k, v)` when it has fields `pub name: Cow<str>` and `pub value: Cow<str>`.
+    - *Fix*: Accessed attributes via `a.name` and `a.value`.
+11. **Trailing Newline in Plaintext Message Body**:
+    - *Error*: `test_simple_plain_message` expected `"Hello World"` but received `"Hello World\n"`.
+    - *Cause*: §10.5 whitespace normalisation was applied in `html.rs`, but plaintext messages were returning unwrapped text without stripping trailing blank lines.
+12. **Relative Link Resolution in Feed Test**:
+    - *Error*: `test_feed_text_content_preferred_over_summary` tested `href="/link"` against `site_url="https://example.com/site/"` expecting `https://example.com/site/link`, but standard origin-relative URLs starting with `/` resolve to `https://example.com/link`.
+
+---
+
+### 3. Steps Needed for Fixing Remaining Failures
+
+1. **Apply §10.5 Whitespace Normalisation to Plaintext Bodies**:
+   - In `crates/extract/src/structure.rs`, run `normalize_plaintext_whitespace(&unwrapped)` on plaintext bodies so leading/trailing blank lines and trailing newlines are stripped uniformly across both HTML and plaintext bodies.
+2. **Reconcile Relative URL Resolution**:
+   - In `crates/extract/src/lib.rs` unit tests, verify whether `href` is root-relative (`"/link"`) or directory-relative (`"link"`), aligning test assertions with RFC 3986 URL resolution rules.
+3. **Clean Up Compiler Warnings**:
+   - Remove unused variable `content_encoding` in `crates/extract/src/structure.rs`.
+   - Run `cargo fmt --all` and verify `cargo clippy --workspace --all-targets -- -D warnings`.
+
+---
+
+### 4. Remaining Steps to Complete Phase 2A (`crates/extract`)
+
+1. **Verify All Unit Tests**:
+   - Ensure all 33 unit tests in `crates/extract` pass with zero failures.
+2. **Add Golden MIME Fixtures in `tests/fixtures/mime/`**:
+   - Per [docs/MIME-AND-TEXT.md §17](file:///home/nvalk1/debloatmail/docs/MIME-AND-TEXT.md#L865):
+     - `simple-plain/` (8bit, quoted-printable, base64)
+     - `alternative/` (text+html, html-only, empty-plaintext-with-html)
+     - `flowed/` (format=flowed, DelSp=yes, space-stuffing, `-- ` separator)
+     - `charsets/` (utf-7, iso-2022-jp, gb2312, mislabelled-utf8, BOM)
+     - `multipart/` (mixed, related, nested, missing boundary)
+     - `signed-encrypted/` (multipart/signed, multipart/encrypted)
+     - `attachments/` (RFC 2231 filename continuations, inline cid:, text/plain with filename)
+     - `limits/` (oversize body, deep nesting)
+3. **Integration & Determinism Tests**:
+   - Create integration test in `tests/` verifying determinism (identical input bytes produce byte-identical output) and RFC 3501 `section_id` round-tripping through `BODY.PEEK[section_id]`.
+4. **CI Invariant Checks**:
+   - Confirm `crates/extract` has zero I/O and runtime dependencies (only `core`, `mail-parser`, `charset`, `chardetng`, `html2text`, `thiserror`).
+
+---
+
+### 5. Next Steps Beyond Phase 2A
+
+Per [docs/architecture.md §14](file:///home/nvalk1/debloatmail/docs/architecture.md#L395):
+- **Phase 2B (`crates/feeds`)**: Single HTTP client via `reqwest` on `rustls` (no default features), feed parsing via `feed-rs`, conditional GET (`ETag`, `If-Modified-Since`), response size cap.
+- **Phase 2C (`crates/engine`)**: Sans-I/O IMAP and SMTP state machines with pimalaya (`io-imap`, `io-smtp`), sockets and TLS in `engine/io.rs` and `engine/tls.rs`.
+- **Phase 3 (`crates/cli` Validation Spike)**: Standalone CLI proving auth, sync, send queue, feed polling, extraction, and FTS5 search end-to-end before any UI/QML code.

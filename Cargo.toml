@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "crates/core",
     "crates/store",
+    "crates/extract",
 ]
 
 [workspace.package]
@@ -12,5 +13,10 @@ edition = "2021"
 [workspace.dependencies]
 debloatmail-core = { path = "crates/core" }
 debloatmail-store = { path = "crates/store" }
+debloatmail-extract = { path = "crates/extract" }
 rusqlite = { version = "0.32", features = ["bundled"] }
 thiserror = "2.0"
+mail-parser = "0.11.9"
+charset = "0.1.5"
+chardetng = "1.0.0"
+html2text = "0.17"

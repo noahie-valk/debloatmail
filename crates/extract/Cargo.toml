@@ -1,0 +1,12 @@
+[package]
+name = "debloatmail-extract"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+debloatmail-core = { workspace = true }
+thiserror = { workspace = true }
+mail-parser = { workspace = true }
+charset = { workspace = true }
+chardetng = { workspace = true }
+html2text = { workspace = true }
