@@ -90,6 +90,7 @@ name = "debloatmail-store"
 version = "0.1.0"
 dependencies = [
  "debloatmail-core",
+ "libc",
  "rusqlite",
  "thiserror",
 ]

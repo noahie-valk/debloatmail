@@ -25,7 +25,11 @@ pub struct ParsedEntry {
 
 /// Parse raw feed bytes into a vector of `ParsedEntry`.
 pub fn parse_feed(bytes: &[u8]) -> Result<Vec<ParsedEntry>, ParseError> {
-    let feed = parser::parse(bytes)?;
+    // Use the builder to disable external entities and DTD processing for security.
+    let builder = parser::Builder::new()
+        .disable_external_entities(true)
+        .disable_dtd(true);
+    let feed = builder.parse(bytes)?;
     let mut entries = Vec::new();
     for entry in feed.entries {
         entries.push(convert_entry(entry));

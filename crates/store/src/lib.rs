@@ -8,6 +8,7 @@ pub mod flags;
 pub mod headers;
 pub mod schema;
 pub mod search;
+pub mod secure_file;
 
 #[derive(Debug, thiserror::Error)]
 pub enum StoreError {

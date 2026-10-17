@@ -1,5 +1,4 @@
-/// Configurable limits for hostile-content parsing per MIME-AND-TEXT.md §13.
-
+//! Configurable limits for hostile-content parsing per MIME-AND-TEXT.md §13.
 /// Compile‑time constants used throughout the codebase. These are public so other crates can enforce the same limits without needing to instantiate `Limits` at runtime.
 pub const MAX_RAW_MESSAGE_SIZE: usize = 25 * 1024 * 1024; // 25 MiB
 pub const MAX_MIME_NESTING_DEPTH: usize = 20;

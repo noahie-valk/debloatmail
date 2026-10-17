@@ -73,25 +73,38 @@ Phase 1 (`core` + `store`) and **Phase 2A (`crates/extract` + MIME fixtures & de
 
 ---
 
-### 3. Next Project Phase: Phase 2B (`crates/feeds`)
+### 3. Completed Phase 2B (`crates/feeds`)
 
-1. **Feed Ingest (`crates/feeds`)**:
-   - Single HTTP client via `reqwest` on `rustls` (no default features), owned exclusively by `crates/feeds`.
-   - RSS/Atom/JSON parsing via `feed-rs`.
-   - Conditional GET support (`ETag`, `If-Modified-Since`).
-   - Strict response size cap (10 MB).
-   - Anti-XXE and anti-billion-laughs XML safety tests with fixtures.
-2. **Phase 2C: Engine & Protocol State Machines (`crates/engine`)**:
-   - Sans-I/O IMAP and SMTP state machines with pimalaya (`io-imap`, `io-smtp`).
-   - Sockets and TLS isolated strictly to `engine/io.rs` and `engine/tls.rs`.
-   - Credential management via `crates/auth` (`keyring` / `oo7`).
-3. **Phase 3: CLI Validation Spike (`crates/cli` / `debloatmailctl`)**:
-   - Implement CLI as the engine's first customer before touching QML.
-   - Prove auth, sync, send queue, feed ingest, MIME extraction, and FTS5 search end-to-end.
-4. **Phase 4: Daemon & D-Bus (`debloatmaild`)**:
-   - Sole SQLite writer process.
-   - Background sync scheduler, system tray, desktop notifications.
-   - D-Bus interfaces `org.noahie.debloatmail` and `org.noahie.debloatmail.Daemon`.
-5. **Phase 5: Desktop GUI (`ui/bridge` & Kirigami QML)**:
-   - Qt6/KF6 Kirigami QML interface bridged via `cxx-qt`.
-   - Plaintext-first reader and composer, unified stream list.
+- Implemented feed ingestion crate `crates/feeds` with a blocking `reqwest` client (rustls‑only) and `feed‑rs` parser.
+- Added conditional GET handling (`ETag`, `If‑Modified‑Since`) and a 10 MiB response size cap.
+- Implemented safety checks against HTML content, XXE, and Billion‑Laughs attacks.
+- Provided `fetch_feed`, `parse_feed`, and `poll_feed` public API (re‑exported in `crates/feeds/src/lib.rs`).
+- Added comprehensive unit and integration tests with a sample RSS fixture (`crates/feeds/tests/fixtures/rss_sample.xml`).
+- All workspace tests pass (`cargo test`), clippy reports 0 warnings, and formatting checks succeed.
+
+### 5. Security Hardening (Completed)
+
+- **Secure DB file creation** – SQLite database files are created with mode 0600 and flags `O_EXCL|O_NOFOLLOW` to prevent symlink attacks. Implemented in [`secure_file.rs`](file:///home/nvalk1/debloatmail/crates/store/src/secure_file.rs). *(Docs: [SECURITY.md §8.5](file:///home/nvalk1/debloatmail/docs/SECURITY.md#85-permissions--secure-file-creation))*
+- **Feed parser hardening** – XML external entities and DTD processing are disabled in the RSS/Atom parser to mitigate XXE and Billion‑Laughs attacks. Implemented in [`parse.rs`](file:///home/nvalk1/debloatmail/crates/feeds/src/parse.rs). *(Docs: [SECURITY.md §6.2](file:///home/nvalk1/debloatmail/docs/SECURITY.md#62-xml-external-entity-protection))*
+- **Clippy lint compliance** – Fixed inner doc comment issue in `limits.rs` to satisfy `clippy::empty_line_after_doc_comments`. *(Docs: [SECURITY.md §8.3](file:///home/nvalk1/debloatmail/docs/SECURITY.md#83-lint-compliance))*
+- **Low‑level system calls** – Added `libc` dependency to use `open` flags securely in `crates/store`. *(Docs: [SECURITY.md §8.4](file:///home/nvalk1/debloatmail/docs/SECURITY.md#84-low-level-system-calls))*
+
+### 4. Upcoming Phases
+
+#### Phase 2C – Engine & Protocol State Machines (`crates/engine`)
+- Sans‑I/O IMAP and SMTP state machines using pimalaya (`io-imap`, `io-smtp`).
+- Network and TLS confined to `engine/io.rs` and `engine/tls.rs`.
+- Credential handling via `crates/auth` (`keyring` / `oo7`).
+
+#### Phase 3 – CLI Validation Spike (`crates/cli` / `debloatmailctl`)
+- Build the CLI as the first consumer of the engine.
+- Demonstrate full end‑to‑end flow: authentication, sync, send queue, feed ingest, MIME extraction, and FTS5 search.
+- Ensure the CLI works before any QML UI is introduced.
+
+#### Phase 4 – Daemon & D‑Bus (`debloatmaild`)
+- Implement the sole SQLite writer process, background sync scheduler, tray integration, and desktop notifications.
+- Expose D‑Bus interfaces `org.noahie.debloatmail` and `org.noahie.debloatmail.Daemon`.
+
+#### Phase 5 – Desktop GUI (`ui/bridge` & Kirigami QML)
+- Bridge Qt6/KF6 Kirigami QML via `cxx‑qt`.
+- Provide a plaintext‑first reader/composer with unified stream list.

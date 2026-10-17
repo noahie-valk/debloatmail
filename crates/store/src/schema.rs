@@ -1,6 +1,7 @@
 use rusqlite::{Connection, OpenFlags};
 use std::path::Path;
 
+use crate::secure_file;
 use crate::StoreError;
 
 pub const CURRENT_SCHEMA_VERSION: u32 = 1;
@@ -62,7 +63,13 @@ pub fn get_revision(conn: &Connection) -> Result<u64, StoreError> {
 
 /// Open a connection to the SQLite database (read/write, sole writer path).
 pub fn open_store(path: impl AsRef<Path>) -> Result<Connection, StoreError> {
-    let mut conn = Connection::open(path)?;
+    // Ensure the database file is created securely with mode 0o600 and O_EXCL|O_NOFOLLOW.
+    // If the file already exists, we just open it.
+    let path_ref = path.as_ref();
+    if !path_ref.exists() {
+        secure_file::secure_create(path_ref)?;
+    }
+    let mut conn = Connection::open(path_ref)?;
     initialize_schema(&mut conn)?;
     Ok(conn)
 }
