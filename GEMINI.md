@@ -73,3 +73,4 @@ If code and a doc disagree, or two docs disagree, stop and ask. Do not pick sile
 - Never: open HTTP or TLS outside `crates/feeds` (no `ureq`, direct `hyper`, or curl shims).
 - Never: add a WebView, HTML renderer, or calendar/contacts code.
 - Never: commit credentials, tokens, or real email/feed data into `tests/fixtures/`.
+- Never: modify or delete an existing test, or weaken an assertion, to make it pass.
