@@ -279,7 +279,7 @@ pub enum SortKey { Date, Received, Author, Subject }
 
 pub struct Cursor {
     pub sort: SortKey,                    // the ordering this cursor belongs to
-    pub published_at: Option<Timestamp>,  // the `Date` key
+    pub date: Option<Timestamp>,          // the `Date` key
     pub sort_at: Option<Timestamp>,       // the `Date` and `Received` keys
     pub text: Option<String>,             // `Author` → author, `Subject` → title
     pub id: PublicId,                     // final tiebreaker, always present

@@ -245,11 +245,11 @@ pub fn query_stream(
     if let Some(c) = cursor {
         match c.sort {
             SortKey::Date => {
-                if let Some(pub_at) = c.published_at {
+                if let Some(date) = c.date {
                     query.push_str(&format!(
-                        " AND (v.published_at < {pub_at}
-                               OR (v.published_at = {pub_at} AND v.sort_at < {})
-                               OR (v.published_at = {pub_at} AND v.sort_at = {} AND v.id < (SELECT id FROM items WHERE public_id = '{}'))) ",
+                        " AND (v.published_at < {date}
+                               OR (v.published_at = {date} AND v.sort_at < {})
+                               OR (v.published_at = {date} AND v.sort_at = {} AND v.id < (SELECT id FROM items WHERE public_id = '{}'))) ",
                         c.sort_at.unwrap_or(0),
                         c.sort_at.unwrap_or(0),
                         c.id.as_str()

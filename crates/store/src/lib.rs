@@ -270,7 +270,7 @@ mod tests {
         // Create cursor from last item of page 1
         let cursor1 = debloatmail_core::Cursor {
             sort: SortKey::Date,
-            published_at: page1[1].date,
+            date: page1[1].date,
             sort_at: Some(page1[1].sort_at),
             text: None,
             id: page1[1].id.clone(),
@@ -285,7 +285,7 @@ mod tests {
         // Page 3: limit 2 with cursor from page 2
         let cursor2 = debloatmail_core::Cursor {
             sort: SortKey::Date,
-            published_at: page2[1].date,
+            date: page2[1].date,
             sort_at: Some(page2[1].sort_at),
             text: None,
             id: page2[1].id.clone(),

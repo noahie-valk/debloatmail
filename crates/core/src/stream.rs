@@ -44,7 +44,7 @@ impl FromStr for SortKey {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Cursor {
     pub sort: SortKey,
-    pub published_at: Option<Timestamp>,
+    pub date: Option<Timestamp>,
     pub sort_at: Option<Timestamp>,
     pub text: Option<String>,
     pub id: PublicId,
@@ -99,5 +99,22 @@ mod tests {
         assert_eq!(SortKey::from_str("author").unwrap(), SortKey::Author);
         assert_eq!(SortKey::from_str("subject").unwrap(), SortKey::Subject);
         assert!(SortKey::from_str("other").is_err());
+    }
+
+    #[test]
+    fn test_cursor_fields() {
+        let id = PublicId::from_str("018f6e80-7c00-7218-971e-7f62b2512f7a").unwrap();
+        let cursor = Cursor {
+            sort: SortKey::Date,
+            date: Some(1700000000),
+            sort_at: Some(1700000000),
+            text: None,
+            id: id.clone(),
+        };
+        assert_eq!(cursor.sort, SortKey::Date);
+        assert_eq!(cursor.date, Some(1700000000));
+        assert_eq!(cursor.sort_at, Some(1700000000));
+        assert_eq!(cursor.text, None);
+        assert_eq!(cursor.id, id);
     }
 }
