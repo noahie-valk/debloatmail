@@ -1,0 +1,21 @@
+<rss version="2.0">
+  <channel>
+    <title>Sample Feed</title>
+    <link>https://example.com/</link>
+    <description>Test RSS feed</description>
+    <item>
+      <title>First Item</title>
+      <link>https://example.com/first</link>
+      <guid>item-1</guid>
+      <pubDate>Mon, 01 Jan 2024 00:00:00 GMT</pubDate>
+      <description>This is the first item.</description>
+    </item>
+    <item>
+      <title>Second Item</title>
+      <link>https://example.com/second</link>
+      <guid>item-2</guid>
+      <pubDate>Tue, 02 Jan 2024 00:00:00 GMT</pubDate>
+      <description>This is the second item.</description>
+    </item>
+  </channel>
+</rss>
