@@ -2,7 +2,7 @@
 
 This document explains **why** debloatmail is built the way it is. The rules in
 `GEMINI.md` are the short form; this is the reasoning behind them, so that future
-contributors (and future you) don't have to reverse-engineer intent from the tree.
+contributors don't have to reverse-engineer intent from the tree.
 
 This revision fixes the issues flagged in the review: the invariants contradiction,
 the `extract()` crate home, the ffi/Android framing, the CLI wording, the size claim,
