@@ -1,0 +1,18 @@
+Title: RFC 2231 Filename Continuation
+SubjectNorm: rfc 2231 filename continuation
+Author: Attachment Sender
+FromAddr: att@example.org
+ToAddrs: reader@example.org
+CcAddrs: 
+ReplyTo: None
+MessageId: rfc2231-msg-1@example.org
+Date: 1792237500
+BodyState: Cached
+Excerpt: Body with an attachment using RFC 2231 parameter continuations.
+HasAttachments: true
+Attachments:
+  [2] annual financial report.pdf | application/pdf | 49 bytes | is_pdf=true | cid=none
+Warnings:
+  (none)
+---
+Body with an attachment using RFC 2231 parameter continuations.

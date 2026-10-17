@@ -1,0 +1,25 @@
+From: Attachment Sender <att@example.org>
+To: Reader <reader@example.org>
+Subject: RFC 2231 Filename Continuation
+Date: Sat, 17 Oct 2026 11:45:00 +0000
+Message-ID: <rfc2231-msg-1@example.org>
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="ATT_BOUND_1"
+
+--ATT_BOUND_1
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: 7bit
+
+Body with an attachment using RFC 2231 parameter continuations.
+
+--ATT_BOUND_1
+Content-Type: application/pdf
+Content-Disposition: attachment;
+ filename*0*=utf-8''annual%20;
+ filename*1*=financial%20;
+ filename*2*=report.pdf
+Content-Transfer-Encoding: 7bit
+
+%PDF-1.4 Fake PDF annual financial report bytes.
+
+--ATT_BOUND_1--

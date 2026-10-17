@@ -1,0 +1,13 @@
+From: Flowed Sender <flowed@example.org>
+To: Reader <reader@example.org>
+Subject: Basic Format Flowed
+Date: Sat, 17 Oct 2026 10:30:00 +0000
+Message-ID: <flowed-basic-1@example.org>
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8; format=flowed
+Content-Transfer-Encoding: 7bit
+
+This line flows onto the next 
+one and ends here.
+
+A second paragraph that is fixed.

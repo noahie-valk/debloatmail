@@ -1,0 +1,20 @@
+Title: Basic Format Flowed
+SubjectNorm: basic format flowed
+Author: Flowed Sender
+FromAddr: flowed@example.org
+ToAddrs: reader@example.org
+CcAddrs: 
+ReplyTo: None
+MessageId: flowed-basic-1@example.org
+Date: 1792233000
+BodyState: Cached
+Excerpt: This line flows onto the next one and ends here.
+HasAttachments: false
+Attachments:
+  (none)
+Warnings:
+  (none)
+---
+This line flows onto the next one and ends here.
+
+A second paragraph that is fixed.

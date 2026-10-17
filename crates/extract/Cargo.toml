@@ -10,3 +10,7 @@ mail-parser = { workspace = true }
 charset = { workspace = true }
 chardetng = { workspace = true }
 html2text = { workspace = true }
+
+[[test]]
+name = "determinism"
+path = "../../tests/integrations/determinism.rs"

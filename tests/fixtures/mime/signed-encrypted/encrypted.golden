@@ -1,0 +1,18 @@
+Title: PGP Encrypted Message
+SubjectNorm: pgp encrypted message
+Author: Cryptographer
+FromAddr: crypto@example.org
+ToAddrs: recip@example.org
+CcAddrs: 
+ReplyTo: None
+MessageId: encrypted-msg-1@example.org
+Date: 1792237200
+BodyState: Cached
+Excerpt: [encrypted message]
+HasAttachments: false
+Attachments:
+  (none)
+Warnings:
+  (none)
+---
+[encrypted message]

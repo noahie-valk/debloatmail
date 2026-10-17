@@ -1,0 +1,18 @@
+Title: Group Syntax Test
+SubjectNorm: group syntax test
+Author: Moderator
+FromAddr: mod@example.org
+ToAddrs: alice@example.org, bob@example.org
+CcAddrs: 
+ReplyTo: None
+MessageId: group-syntax-1@example.org
+Date: 1792239000
+BodyState: Cached
+Excerpt: Message sent using RFC 5322 group address syntax.
+HasAttachments: false
+Attachments:
+  (none)
+Warnings:
+  (none)
+---
+Message sent using RFC 5322 group address syntax.

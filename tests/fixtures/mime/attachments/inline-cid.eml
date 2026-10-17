@@ -1,0 +1,25 @@
+From: Media Sender <media@example.org>
+To: Reader <reader@example.org>
+Subject: Inline Attachment with Content-ID
+Date: Sat, 17 Oct 2026 11:50:00 +0000
+Message-ID: <inline-cid-1@example.org>
+MIME-Version: 1.0
+Content-Type: multipart/related; boundary="CID_BOUND_1"
+
+--CID_BOUND_1
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: 7bit
+
+Message referencing an inline attachment.
+
+--CID_BOUND_1
+Content-Type: image/jpeg; name="photo.jpg"
+Content-Disposition: inline; filename="photo.jpg"
+Content-ID: <img_42@example.org>
+Content-Transfer-Encoding: base64
+
+/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////
+////////////////////////////////////////////wgALCAABAAEBAREA/8QAFBABAAAAAAAA
+AAAAAAAAAAAAAP/aAAgBAQABPxA=
+
+--CID_BOUND_1--

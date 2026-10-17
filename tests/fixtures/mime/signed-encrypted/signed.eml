@@ -1,0 +1,26 @@
+From: Alice Signer <alice@example.org>
+To: Bob Verifier <bob@example.org>
+Subject: Signed Message
+Date: Sat, 17 Oct 2026 11:35:00 +0000
+Message-ID: <signed-msg-1@example.org>
+MIME-Version: 1.0
+Content-Type: multipart/signed; protocol="application/pgp-signature"; micalg="pgp-sha256"; boundary="SIGNED_BOUND"
+
+--SIGNED_BOUND
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: 7bit
+
+Signed message content. First part is the body.
+
+--SIGNED_BOUND
+Content-Type: application/pgp-signature; name="signature.asc"
+Content-Description: OpenPGP digital signature
+Content-Disposition: inline
+
+-----BEGIN PGP SIGNATURE-----
+Version: Test 1.0
+
+iQEcBAEBAgAGBQJk==
+-----END PGP SIGNATURE-----
+
+--SIGNED_BOUND--

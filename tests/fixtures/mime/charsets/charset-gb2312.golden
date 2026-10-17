@@ -1,0 +1,18 @@
+Title: GB2312 Test
+SubjectNorm: gb2312 test
+Author: Chinese
+FromAddr: cn@example.org
+ToAddrs: reader@example.org
+CcAddrs: 
+ReplyTo: None
+MessageId: charset-gb2312-1@example.org
+Date: 1792234800
+BodyState: Cached
+Excerpt: ��ã����磡
+HasAttachments: false
+Attachments:
+  (none)
+Warnings:
+  (none)
+---
+��ã����磡

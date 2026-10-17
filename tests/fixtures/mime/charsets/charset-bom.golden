@@ -1,0 +1,18 @@
+Title: BOM Test
+SubjectNorm: bom test
+Author: BOM Sender
+FromAddr: bom@example.org
+ToAddrs: reader@example.org
+CcAddrs: 
+ReplyTo: None
+MessageId: charset-bom-1@example.org
+Date: 1792235400
+BodyState: Cached
+Excerpt: UTF-8 content despite windows-1252 declaration.
+HasAttachments: false
+Attachments:
+  (none)
+Warnings:
+  (none)
+---
+UTF-8 content despite windows-1252 declaration.

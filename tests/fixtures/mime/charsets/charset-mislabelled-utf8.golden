@@ -1,0 +1,18 @@
+Title: Mislabelled UTF-8 Test
+SubjectNorm: mislabelled utf-8 test
+Author: German
+FromAddr: de@example.org
+ToAddrs: reader@example.org
+CcAddrs: 
+ReplyTo: None
+MessageId: charset-mislabelled-1@example.org
+Date: 1792235100
+BodyState: Cached
+Excerpt: München und Zürich: schön!
+HasAttachments: false
+Attachments:
+  (none)
+Warnings:
+  (none)
+---
+München und Zürich: schön!

@@ -1,0 +1,18 @@
+Title: Bad QP Hex
+SubjectNorm: bad qp hex
+Author: Bad QP Sender
+FromAddr: badqp@example.org
+ToAddrs: reader@example.org
+CcAddrs: 
+ReplyTo: None
+MessageId: bad-qp-1@example.org
+Date: 1792239900
+BodyState: Cached
+Excerpt: Hello world with bad hex =ZZ and literal soft breakat the end.
+HasAttachments: false
+Attachments:
+  (none)
+Warnings:
+  (none)
+---
+Hello world with bad hex =ZZ and literal soft breakat the end.

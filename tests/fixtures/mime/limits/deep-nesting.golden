@@ -1,0 +1,18 @@
+Title: Deep Nesting Test
+SubjectNorm: deep nesting test
+Author: Deep Sender
+FromAddr: deep@example.org
+ToAddrs: reader@example.org
+CcAddrs: 
+ReplyTo: None
+MessageId: deep-nesting-1@example.org
+Date: 1792240500
+BodyState: Cached
+Excerpt: None
+HasAttachments: false
+Attachments:
+  (none)
+Warnings:
+  - MIME nesting depth limit exceeded at section 1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1
+---
+

@@ -1,0 +1,18 @@
+Title: Flowed DelSp Yes
+SubjectNorm: flowed delsp yes
+Author: Flowed Delsp
+FromAddr: delsp@example.org
+ToAddrs: reader@example.org
+CcAddrs: 
+ReplyTo: None
+MessageId: flowed-delsp-1@example.org
+Date: 1792233300
+BodyState: Cached
+Excerpt: Soft-break word-split joined with DelSp.
+HasAttachments: false
+Attachments:
+  (none)
+Warnings:
+  (none)
+---
+Soft-break word-split joined with DelSp.

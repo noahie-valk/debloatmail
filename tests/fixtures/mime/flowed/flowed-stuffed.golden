@@ -1,0 +1,20 @@
+Title: Space Stuffed Flowed
+SubjectNorm: space stuffed flowed
+Author: Flowed Stuffed
+FromAddr: stuffed@example.org
+ToAddrs: reader@example.org
+CcAddrs: 
+ReplyTo: None
+MessageId: flowed-stuffed-1@example.org
+Date: 1792233600
+BodyState: Cached
+Excerpt: > Quoted line that was stuffed. > Second quoted line. From line that was stuffed with space.
+HasAttachments: false
+Attachments:
+  (none)
+Warnings:
+  (none)
+---
+> Quoted line that was stuffed.
+> Second quoted line.
+From line that was stuffed with space.

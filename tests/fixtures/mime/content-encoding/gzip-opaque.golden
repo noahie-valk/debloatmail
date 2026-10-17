@@ -1,0 +1,18 @@
+Title: Compressed Part
+SubjectNorm: compressed part
+Author: Compressed Sender
+FromAddr: compress@example.org
+ToAddrs: reader@example.org
+CcAddrs: 
+ReplyTo: None
+MessageId: gzip-opaque-1@example.org
+Date: 1792239300
+BodyState: Cached
+Excerpt: None
+HasAttachments: false
+Attachments:
+  (none)
+Warnings:
+  - Part 1 uses compressed Content-Encoding; treated as opaque without decompression
+---
+

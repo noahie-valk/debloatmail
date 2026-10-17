@@ -1,0 +1,20 @@
+Title: Flowed Signature Separator
+SubjectNorm: flowed signature separator
+Author: Flowed Sig
+FromAddr: sig@example.org
+ToAddrs: reader@example.org
+CcAddrs: 
+ReplyTo: None
+MessageId: flowed-sig-1@example.org
+Date: 1792233900
+BodyState: Cached
+Excerpt: Main content paragraph that should flow onto the next line. -- Signature here must not be flowed.
+HasAttachments: false
+Attachments:
+  (none)
+Warnings:
+  (none)
+---
+Main content paragraph that should flow onto the next line.
+-- 
+Signature here must not be flowed.

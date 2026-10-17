@@ -1,0 +1,18 @@
+Title: Missing Boundary Test
+SubjectNorm: missing boundary test
+Author: Broken Sender
+FromAddr: broken@example.org
+ToAddrs: reader@example.org
+CcAddrs: 
+ReplyTo: None
+MessageId: multipart-broken-1@example.org
+Date: 1792236600
+BodyState: Cached
+Excerpt: None
+HasAttachments: true
+Attachments:
+  [1] (no filename) | multipart/mixed | 120 bytes | is_pdf=false | cid=none
+Warnings:
+  (none)
+---
+

@@ -1,0 +1,23 @@
+Title: Simple Base64
+SubjectNorm: simple base64
+Author: Eve Adams
+FromAddr: eve@example.org
+ToAddrs: frank@example.org
+CcAddrs: 
+ReplyTo: None
+MessageId: simple-base64-1@example.org
+Date: 1792231800
+BodyState: Cached
+Excerpt: Hello Frank,
+HasAttachments: false
+Attachments:
+  (none)
+Warnings:
+  (none)
+---
+Hello Frank,
+
+This is a plaintext body encoded in base64.
+
+Best,
+Eve

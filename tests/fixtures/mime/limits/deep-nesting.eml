@@ -1,0 +1,113 @@
+From: Deep Sender <deep@example.org>
+To: Reader <reader@example.org>
+Subject: Deep Nesting Test
+Date: Sat, 17 Oct 2026 12:35:00 +0000
+Message-ID: <deep-nesting-1@example.org>
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="BOUND_0"
+
+--BOUND_0
+Content-Type: multipart/mixed; boundary="BOUND_1"
+
+--BOUND_1
+Content-Type: multipart/mixed; boundary="BOUND_2"
+
+--BOUND_2
+Content-Type: multipart/mixed; boundary="BOUND_3"
+
+--BOUND_3
+Content-Type: multipart/mixed; boundary="BOUND_4"
+
+--BOUND_4
+Content-Type: multipart/mixed; boundary="BOUND_5"
+
+--BOUND_5
+Content-Type: multipart/mixed; boundary="BOUND_6"
+
+--BOUND_6
+Content-Type: multipart/mixed; boundary="BOUND_7"
+
+--BOUND_7
+Content-Type: multipart/mixed; boundary="BOUND_8"
+
+--BOUND_8
+Content-Type: multipart/mixed; boundary="BOUND_9"
+
+--BOUND_9
+Content-Type: multipart/mixed; boundary="BOUND_10"
+
+--BOUND_10
+Content-Type: multipart/mixed; boundary="BOUND_11"
+
+--BOUND_11
+Content-Type: multipart/mixed; boundary="BOUND_12"
+
+--BOUND_12
+Content-Type: multipart/mixed; boundary="BOUND_13"
+
+--BOUND_13
+Content-Type: multipart/mixed; boundary="BOUND_14"
+
+--BOUND_14
+Content-Type: multipart/mixed; boundary="BOUND_15"
+
+--BOUND_15
+Content-Type: multipart/mixed; boundary="BOUND_16"
+
+--BOUND_16
+Content-Type: multipart/mixed; boundary="BOUND_17"
+
+--BOUND_17
+Content-Type: multipart/mixed; boundary="BOUND_18"
+
+--BOUND_18
+Content-Type: multipart/mixed; boundary="BOUND_19"
+
+--BOUND_19
+Content-Type: multipart/mixed; boundary="BOUND_20"
+
+--BOUND_20
+Content-Type: multipart/mixed; boundary="BOUND_21"
+
+--BOUND_21
+Content-Type: multipart/mixed; boundary="BOUND_22"
+
+--BOUND_22
+Content-Type: multipart/mixed; boundary="BOUND_23"
+
+--BOUND_23
+Content-Type: multipart/mixed; boundary="BOUND_24"
+
+--BOUND_24
+Content-Type: multipart/mixed; boundary="BOUND_25"
+
+--BOUND_25
+Content-Type: text/plain; charset=utf-8
+
+Deep content at level 25.
+--BOUND_25--
+--BOUND_25--
+--BOUND_24--
+--BOUND_23--
+--BOUND_22--
+--BOUND_21--
+--BOUND_20--
+--BOUND_19--
+--BOUND_18--
+--BOUND_17--
+--BOUND_16--
+--BOUND_15--
+--BOUND_14--
+--BOUND_13--
+--BOUND_12--
+--BOUND_11--
+--BOUND_10--
+--BOUND_9--
+--BOUND_8--
+--BOUND_7--
+--BOUND_6--
+--BOUND_5--
+--BOUND_4--
+--BOUND_3--
+--BOUND_2--
+--BOUND_1--

@@ -1,0 +1,25 @@
+From: Related Sender <related@example.org>
+To: Reader <reader@example.org>
+Subject: Multipart Related Message
+Date: Sat, 17 Oct 2026 11:20:00 +0000
+Message-ID: <multipart-related-1@example.org>
+MIME-Version: 1.0
+Content-Type: multipart/related; boundary="RELATED_BOUND_1"
+
+--RELATED_BOUND_1
+Content-Type: text/html; charset=utf-8
+Content-Transfer-Encoding: 7bit
+
+<p>Here is our inline image:</p>
+<p><img src="cid:chart001@example.org" alt="Performance Chart"></p>
+
+--RELATED_BOUND_1
+Content-Type: image/png; name="chart.png"
+Content-Disposition: inline; filename="chart.png"
+Content-ID: <chart001@example.org>
+Content-Transfer-Encoding: base64
+
+iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YA
+AAAASUVORK5CYII=
+
+--RELATED_BOUND_1--

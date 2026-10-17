@@ -1,0 +1,11 @@
+From: Moderator <mod@example.org>
+To: Discussion List: alice@example.org, bob@example.org;
+Cc: undisclosed-recipients:;
+Subject: Group Syntax Test
+Date: Sat, 17 Oct 2026 12:10:00 +0000
+Message-ID: <group-syntax-1@example.org>
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: 7bit
+
+Message sent using RFC 5322 group address syntax.

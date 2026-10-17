@@ -1,0 +1,17 @@
+From: Newsletter <news@example.org>
+To: Subscriber <sub@example.org>
+Subject: HTML Only Newsletter
+Date: Sat, 17 Oct 2026 10:20:00 +0000
+Message-ID: <alt-html-1@example.org>
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="ALT_BOUND_2"
+
+--ALT_BOUND_2
+Content-Type: text/html; charset=utf-8
+Content-Transfer-Encoding: 7bit
+
+<div><p>Hello <b>Subscriber</b>,</p>
+<blockquote><p>Quote of the day</p></blockquote>
+<p>Read more at <a href="https://example.org/stories/1">our story</a>.</p></div>
+
+--ALT_BOUND_2--

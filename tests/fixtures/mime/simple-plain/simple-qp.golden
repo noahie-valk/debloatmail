@@ -1,0 +1,23 @@
+Title: Simple QP
+SubjectNorm: simple qp
+Author: Claire Baker
+FromAddr: claire@example.org
+ToAddrs: dave@example.org
+CcAddrs: 
+ReplyTo: None
+MessageId: simple-qp-1@example.org
+Date: 1792231500
+BodyState: Cached
+Excerpt: Hello Dave,
+HasAttachments: false
+Attachments:
+  (none)
+Warnings:
+  (none)
+---
+Hello Dave,
+
+This message uses quoted-printable transfer encoding with soft line breaks that should be joined smoothly, and symbols like 100€.
+
+Cheers,
+Claire

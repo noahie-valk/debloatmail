@@ -1,0 +1,20 @@
+Title: Multipart Related Message
+SubjectNorm: multipart related message
+Author: Related Sender
+FromAddr: related@example.org
+ToAddrs: reader@example.org
+CcAddrs: 
+ReplyTo: None
+MessageId: multipart-related-1@example.org
+Date: 1792236000
+BodyState: Cached
+Excerpt: Here is our inline image:
+HasAttachments: true
+Attachments:
+  [2] chart.png | image/png | 68 bytes | is_pdf=false | cid=chart001@example.org
+Warnings:
+  (none)
+---
+Here is our inline image:
+
+[image: Performance Chart]

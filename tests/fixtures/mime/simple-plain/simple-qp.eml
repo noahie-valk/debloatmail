@@ -1,0 +1,14 @@
+From: Claire Baker <claire@example.org>
+To: Dave Jones <dave@example.org>
+Subject: Simple QP
+Date: Sat, 17 Oct 2026 10:05:00 +0000
+Message-ID: <simple-qp-1@example.org>
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+
+Hello Dave,=0A=0A=
+This message uses quoted-printable transfer encoding with soft line=20=
+breaks that should be joined smoothly, and symbols like 100=E2=82=AC.=0A=0A=
+Cheers,=0A=
+Claire

@@ -1,0 +1,22 @@
+Title: HTML Only Newsletter
+SubjectNorm: html only newsletter
+Author: Newsletter
+FromAddr: news@example.org
+ToAddrs: sub@example.org
+CcAddrs: 
+ReplyTo: None
+MessageId: alt-html-1@example.org
+Date: 1792232400
+BodyState: Cached
+Excerpt: Hello Subscriber,
+HasAttachments: false
+Attachments:
+  (none)
+Warnings:
+  (none)
+---
+Hello Subscriber,
+
+> Quote of the day
+
+Read more at our story <https://example.org/stories/1>.

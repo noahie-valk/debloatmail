@@ -1,0 +1,18 @@
+Title: Signed Message
+SubjectNorm: signed message
+Author: Alice Signer
+FromAddr: alice@example.org
+ToAddrs: bob@example.org
+CcAddrs: 
+ReplyTo: None
+MessageId: signed-msg-1@example.org
+Date: 1792236900
+BodyState: Cached
+Excerpt: Signed message content. First part is the body.
+HasAttachments: false
+Attachments:
+  (none)
+Warnings:
+  (none)
+---
+Signed message content. First part is the body.

@@ -1,0 +1,10 @@
+From: Japanese <jp@example.org>
+To: Reader <reader@example.org>
+Subject: ISO-2022-JP Test
+Date: Sat, 17 Oct 2026 10:55:00 +0000
+Message-ID: <charset-iso2022jp-1@example.org>
+MIME-Version: 1.0
+Content-Type: text/plain; charset=iso-2022-jp
+Content-Transfer-Encoding: 7bit
+
+こんにちは、世界！

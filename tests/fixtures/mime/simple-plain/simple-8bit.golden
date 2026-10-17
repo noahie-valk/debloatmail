@@ -1,0 +1,23 @@
+Title: Simple 8bit
+SubjectNorm: simple 8bit
+Author: Alice Doe
+FromAddr: alice@example.org
+ToAddrs: bob@example.org
+CcAddrs: 
+ReplyTo: None
+MessageId: simple-8bit-1@example.org
+Date: 1792231200
+BodyState: Cached
+Excerpt: Hello Bob,
+HasAttachments: false
+Attachments:
+  (none)
+Warnings:
+  (none)
+---
+Hello Bob,
+
+This is a clean 8bit UTF-8 message with accents: café, résumé.
+
+Best regards,
+Alice

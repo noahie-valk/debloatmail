@@ -1,0 +1,10 @@
+From: UTF7 Sender <utf7@example.org>
+To: Reader <reader@example.org>
+Subject: UTF-7 Test
+Date: Sat, 17 Oct 2026 10:50:00 +0000
+Message-ID: <charset-utf7-1@example.org>
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-7
+Content-Transfer-Encoding: 7bit
+
+Hello +AKM-100 and +IKw-50!

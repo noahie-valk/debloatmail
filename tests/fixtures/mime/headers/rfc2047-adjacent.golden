@@ -1,0 +1,18 @@
+Title: HelloWorld
+SubjectNorm: helloworld
+Author: Jörg Haider
+FromAddr: joerg@example.org
+ToAddrs: alice@example.org
+CcAddrs: 
+ReplyTo: None
+MessageId: rfc2047-adj-1@example.org
+Date: 1792238400
+BodyState: Cached
+Excerpt: Body testing RFC 2047 header decoding rules.
+HasAttachments: false
+Attachments:
+  (none)
+Warnings:
+  (none)
+---
+Body testing RFC 2047 header decoding rules.

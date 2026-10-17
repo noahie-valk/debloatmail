@@ -1,0 +1,18 @@
+Title: Alternative Text and HTML
+SubjectNorm: alternative text and html
+Author: Grace Hopper
+FromAddr: grace@example.org
+ToAddrs: henry@example.org
+CcAddrs: 
+ReplyTo: None
+MessageId: alt-both-1@example.org
+Date: 1792232100
+BodyState: Cached
+Excerpt: This is the plain text version that must be preferred.
+HasAttachments: false
+Attachments:
+  (none)
+Warnings:
+  (none)
+---
+This is the plain text version that must be preferred.

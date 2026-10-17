@@ -1,0 +1,18 @@
+Title: Empty Plain With HTML
+SubjectNorm: empty plain with html
+Author: Sender
+FromAddr: sender@example.org
+ToAddrs: receiver@example.org
+CcAddrs: 
+ReplyTo: None
+MessageId: alt-empty-plain-1@example.org
+Date: 1792232700
+BodyState: Cached
+Excerpt: Fallback content from HTML because plaintext was whitespace only.
+HasAttachments: false
+Attachments:
+  (none)
+Warnings:
+  (none)
+---
+Fallback content from HTML because plaintext was whitespace only.

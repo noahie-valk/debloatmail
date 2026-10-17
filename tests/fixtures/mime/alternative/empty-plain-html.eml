@@ -1,0 +1,22 @@
+From: Sender <sender@example.org>
+To: Receiver <receiver@example.org>
+Subject: Empty Plain With HTML
+Date: Sat, 17 Oct 2026 10:25:00 +0000
+Message-ID: <alt-empty-plain-1@example.org>
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="ALT_BOUND_3"
+
+--ALT_BOUND_3
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: 7bit
+
+   
+   
+
+--ALT_BOUND_3
+Content-Type: text/html; charset=utf-8
+Content-Transfer-Encoding: 7bit
+
+<p>Fallback content from HTML because plaintext was whitespace only.</p>
+
+--ALT_BOUND_3--

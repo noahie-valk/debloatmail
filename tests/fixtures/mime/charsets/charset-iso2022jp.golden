@@ -1,0 +1,18 @@
+Title: ISO-2022-JP Test
+SubjectNorm: iso-2022-jp test
+Author: Japanese
+FromAddr: jp@example.org
+ToAddrs: reader@example.org
+CcAddrs: 
+ReplyTo: None
+MessageId: charset-iso2022jp-1@example.org
+Date: 1792234500
+BodyState: Cached
+Excerpt: こんにちは、世界！
+HasAttachments: false
+Attachments:
+  (none)
+Warnings:
+  (none)
+---
+こんにちは、世界！

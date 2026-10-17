@@ -1,0 +1,26 @@
+From: Cryptographer <crypto@example.org>
+To: Recipient <recip@example.org>
+Subject: PGP Encrypted Message
+Date: Sat, 17 Oct 2026 11:40:00 +0000
+Message-ID: <encrypted-msg-1@example.org>
+MIME-Version: 1.0
+Content-Type: multipart/encrypted; protocol="application/pgp-encrypted"; boundary="ENCRYPTED_BOUND"
+
+--ENCRYPTED_BOUND
+Content-Type: application/pgp-encrypted
+Content-Description: PGP/MIME version identification
+
+Version: 1
+
+--ENCRYPTED_BOUND
+Content-Type: application/octet-stream; name="encrypted.asc"
+Content-Description: OpenPGP encrypted message
+Content-Disposition: inline; filename="encrypted.asc"
+
+-----BEGIN PGP MESSAGE-----
+Version: Test 1.0
+
+qANQR1DBwU4D...
+-----END PGP MESSAGE-----
+
+--ENCRYPTED_BOUND--

@@ -1,0 +1,18 @@
+Title: Truncated Base64
+SubjectNorm: truncated base64
+Author: Truncated Sender
+FromAddr: trunc@example.org
+ToAddrs: reader@example.org
+CcAddrs: 
+ReplyTo: None
+MessageId: trunc-b64-1@example.org
+Date: 1792239600
+BodyState: Cached
+Excerpt: Hello world!
+HasAttachments: false
+Attachments:
+  (none)
+Warnings:
+  (none)
+---
+Hello world!

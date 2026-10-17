@@ -166,7 +166,22 @@ pub fn extract_message(
     let (body_text, body_state) = if state.is_encrypted {
         ("[encrypted message]".to_string(), BodyState::Cached)
     } else if let Some((selected, is_html)) = state.body_candidate {
-        let raw_part_bytes = selected.part.contents();
+        let recovered_bytes;
+        let raw_part_bytes = if let mail_parser::PartType::Text(ref text) = selected.part.body {
+            if text.chars().all(|c| (c as u32) <= 0xFF) {
+                let candidate: Vec<u8> = text.chars().map(|c| c as u8).collect();
+                if std::str::from_utf8(&candidate).is_ok() {
+                    recovered_bytes = candidate;
+                    &recovered_bytes[..]
+                } else {
+                    selected.part.contents()
+                }
+            } else {
+                selected.part.contents()
+            }
+        } else {
+            selected.part.contents()
+        };
 
         // Check for compressed Content-Encoding per §7 & §14 (treat as opaque, do not decompress)
         let has_compression = selected.part.headers.iter().any(|h| {

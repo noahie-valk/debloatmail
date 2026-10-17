@@ -1,0 +1,11 @@
+From: Bad QP Sender <badqp@example.org>
+To: Reader <reader@example.org>
+Subject: Bad QP Hex
+Date: Sat, 17 Oct 2026 12:25:00 +0000
+Message-ID: <bad-qp-1@example.org>
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+
+Hello world with bad hex =ZZ and literal soft break=
+at the end.

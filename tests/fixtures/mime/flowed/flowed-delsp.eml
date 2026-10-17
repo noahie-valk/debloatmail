@@ -1,0 +1,11 @@
+From: Flowed Delsp <delsp@example.org>
+To: Reader <reader@example.org>
+Subject: Flowed DelSp Yes
+Date: Sat, 17 Oct 2026 10:35:00 +0000
+Message-ID: <flowed-delsp-1@example.org>
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8; format=flowed; delsp=yes
+Content-Transfer-Encoding: 7bit
+
+Soft-break word- 
+split joined with DelSp.

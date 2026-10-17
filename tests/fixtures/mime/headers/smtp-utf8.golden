@@ -1,0 +1,18 @@
+Title: Meeting in Zürich 🏔️
+SubjectNorm: meeting in zürich 🏔️
+Author: Renée Dupont
+FromAddr: renee@example.org
+ToAddrs: francois@example.org
+CcAddrs: 
+ReplyTo: None
+MessageId: smtp-utf8-1@example.org
+Date: 1792238700
+BodyState: Cached
+Excerpt: Raw UTF-8 headers without RFC 2047 encoding per RFC 6532.
+HasAttachments: false
+Attachments:
+  (none)
+Warnings:
+  (none)
+---
+Raw UTF-8 headers without RFC 2047 encoding per RFC 6532.

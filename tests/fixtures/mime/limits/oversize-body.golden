@@ -1,0 +1,18 @@
+Title: Oversize Body Test
+SubjectNorm: oversize body test
+Author: Big Sender
+FromAddr: big@example.org
+ToAddrs: reader@example.org
+CcAddrs: 
+ReplyTo: None
+MessageId: oversize-body-1@example.org
+Date: 1792240200
+BodyState: Cached
+Excerpt: Paragraph 1: The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The qui
+HasAttachments: false
+Attachments:
+  (none)
+Warnings:
+  - Extracted body (6513 bytes) exceeds limit (500 bytes); truncated at paragraph boundary
+---
+Paragraph 1: The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. 

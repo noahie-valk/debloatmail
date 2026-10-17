@@ -1,0 +1,18 @@
+Title: Inline Attachment with Content-ID
+SubjectNorm: inline attachment with content-id
+Author: Media Sender
+FromAddr: media@example.org
+ToAddrs: reader@example.org
+CcAddrs: 
+ReplyTo: None
+MessageId: inline-cid-1@example.org
+Date: 1792237800
+BodyState: Cached
+Excerpt: Message referencing an inline attachment.
+HasAttachments: true
+Attachments:
+  [2] photo.jpg | image/jpeg | 134 bytes | is_pdf=false | cid=img_42@example.org
+Warnings:
+  (none)
+---
+Message referencing an inline attachment.

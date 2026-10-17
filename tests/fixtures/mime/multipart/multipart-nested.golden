@@ -1,0 +1,18 @@
+Title: Nested Multipart
+SubjectNorm: nested multipart
+Author: Nested Sender
+FromAddr: nested@example.org
+ToAddrs: reader@example.org
+CcAddrs: 
+ReplyTo: None
+MessageId: multipart-nested-1@example.org
+Date: 1792236300
+BodyState: Cached
+Excerpt: Nested plain text at section 1.1.
+HasAttachments: true
+Attachments:
+  [2] report.pdf | application/pdf | 35 bytes | is_pdf=true | cid=none
+Warnings:
+  (none)
+---
+Nested plain text at section 1.1.

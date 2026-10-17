@@ -1,0 +1,11 @@
+From: Compressed Sender <compress@example.org>
+To: Reader <reader@example.org>
+Subject: Compressed Part
+Date: Sat, 17 Oct 2026 12:15:00 +0000
+Message-ID: <gzip-opaque-1@example.org>
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+Content-Encoding: gzip
+Content-Transfer-Encoding: base64
+
+H4sICD5qTmcCA3RleHQudHh0AMtIzcnJVyjPL8pJUQQA8n4u3xEAAAA=

@@ -1,0 +1,18 @@
+Title: Patch and Notes
+SubjectNorm: patch and notes
+Author: Developer
+FromAddr: dev@example.org
+ToAddrs: rev@example.org
+CcAddrs: 
+ReplyTo: None
+MessageId: plain-att-1@example.org
+Date: 1792238100
+BodyState: Cached
+Excerpt: Please find the patch file attached.
+HasAttachments: true
+Attachments:
+  [2] fix.patch | text/plain | 51 bytes | is_pdf=false | cid=none
+Warnings:
+  (none)
+---
+Please find the patch file attached.

@@ -1,0 +1,10 @@
+From: =?utf-8?Q?J=C3=B6rg_Haider?= <joerg@example.org>
+To: =?utf-8?B?QWxpY2U=?= <alice@example.org>
+Subject: =?utf-8?B?SGVsbG8=?=   =?utf-8?B?V29ybGQ=?=
+Date: Sat, 17 Oct 2026 12:00:00 +0000
+Message-ID: <rfc2047-adj-1@example.org>
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: 7bit
+
+Body testing RFC 2047 header decoding rules.

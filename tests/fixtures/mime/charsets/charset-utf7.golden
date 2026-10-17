@@ -1,0 +1,18 @@
+Title: UTF-7 Test
+SubjectNorm: utf-7 test
+Author: UTF7 Sender
+FromAddr: utf7@example.org
+ToAddrs: reader@example.org
+CcAddrs: 
+ReplyTo: None
+MessageId: charset-utf7-1@example.org
+Date: 1792234200
+BodyState: Cached
+Excerpt: Hello ��100 and ���50!
+HasAttachments: false
+Attachments:
+  (none)
+Warnings:
+  (none)
+---
+Hello ��100 and ���50!

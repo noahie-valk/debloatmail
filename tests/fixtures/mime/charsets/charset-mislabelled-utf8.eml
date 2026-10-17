@@ -1,0 +1,10 @@
+From: German <de@example.org>
+To: Reader <reader@example.org>
+Subject: Mislabelled UTF-8 Test
+Date: Sat, 17 Oct 2026 11:05:00 +0000
+Message-ID: <charset-mislabelled-1@example.org>
+MIME-Version: 1.0
+Content-Type: text/plain; charset=iso-8859-1
+Content-Transfer-Encoding: 8bit
+
+München und Zürich: schön!

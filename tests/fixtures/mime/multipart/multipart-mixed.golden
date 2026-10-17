@@ -1,0 +1,18 @@
+Title: Multipart Mixed Message
+SubjectNorm: multipart mixed message
+Author: Mixed Sender
+FromAddr: mixed@example.org
+ToAddrs: reader@example.org
+CcAddrs: 
+ReplyTo: None
+MessageId: multipart-mixed-1@example.org
+Date: 1792235700
+BodyState: Cached
+Excerpt: Primary email body in multipart/mixed.
+HasAttachments: true
+Attachments:
+  [2] build.log | text/plain | 31 bytes | is_pdf=false | cid=none
+Warnings:
+  (none)
+---
+Primary email body in multipart/mixed.

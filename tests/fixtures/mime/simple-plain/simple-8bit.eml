@@ -1,0 +1,15 @@
+From: Alice Doe <alice@example.org>
+To: Bob Smith <bob@example.org>
+Subject: Simple 8bit
+Date: Sat, 17 Oct 2026 10:00:00 +0000
+Message-ID: <simple-8bit-1@example.org>
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: 8bit
+
+Hello Bob,
+
+This is a clean 8bit UTF-8 message with accents: café, résumé.
+
+Best regards,
+Alice
