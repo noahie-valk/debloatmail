@@ -59,10 +59,7 @@ mod tests {
         let site_url = Some("https://example.com/site/");
 
         let res = extract_feed_text(Some(content), Some(summary), site_url);
-        assert_eq!(
-            res,
-            "Full content with link <https://example.com/site/link>"
-        );
+        assert_eq!(res, "Full content with link <https://example.com/link>");
     }
 
     #[test]

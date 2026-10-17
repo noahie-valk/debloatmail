@@ -205,23 +205,27 @@ pub fn extract_message(
             let rendered = if is_html {
                 html::html_to_plaintext(&decoded_text, None)
             } else {
-                let is_flowed = selected.part.content_type().map_or(false, |ct| {
-                    ct.attributes().map_or(false, |attrs| {
+                let is_flowed = selected.part.content_type().is_some_and(|ct| {
+                    ct.attributes().is_some_and(|attrs| {
                         attrs.iter().any(|a| {
                             a.name.eq_ignore_ascii_case("format")
                                 && a.value.eq_ignore_ascii_case("flowed")
                         })
                     })
                 });
-                let delsp = selected.part.content_type().map_or(false, |ct| {
-                    ct.attributes().map_or(false, |attrs| {
+                let delsp = selected.part.content_type().is_some_and(|ct| {
+                    ct.attributes().is_some_and(|attrs| {
                         attrs.iter().any(|a| {
                             a.name.eq_ignore_ascii_case("delsp")
                                 && a.value.eq_ignore_ascii_case("yes")
                         })
                     })
                 });
-                normalize_plaintext_whitespace(&flowed::unwrap_flowed(&decoded_text, is_flowed, delsp))
+                normalize_plaintext_whitespace(&flowed::unwrap_flowed(
+                    &decoded_text,
+                    is_flowed,
+                    delsp,
+                ))
             };
 
             // Truncate at paragraph boundary if body exceeds limit per §13
@@ -514,16 +518,16 @@ fn record_attachment(part: &MessagePart<'_>, section_id: &str, state: &mut WalkS
 
 fn is_type(part: &MessagePart<'_>, main_type: &str) -> bool {
     part.content_type()
-        .map_or(false, |ct| ct.c_type.eq_ignore_ascii_case(main_type))
+        .is_some_and(|ct| ct.c_type.eq_ignore_ascii_case(main_type))
 }
 
 fn is_subtype(part: &MessagePart<'_>, main_type: &str, sub_type: &str) -> bool {
-    part.content_type().map_or(false, |ct| {
+    part.content_type().is_some_and(|ct| {
         ct.c_type.eq_ignore_ascii_case(main_type)
             && ct
                 .c_subtype
                 .as_deref()
-                .map_or(false, |s| s.eq_ignore_ascii_case(sub_type))
+                .is_some_and(|s| s.eq_ignore_ascii_case(sub_type))
     })
 }
 
@@ -541,6 +545,48 @@ fn truncate_at_paragraph_boundary(text: &str, max_len: usize) -> String {
     } else {
         slice.to_string()
     }
+}
+
+/// Whitespace normalisation for plaintext bodies per MIME-AND-TEXT.md §9 and §10.5.
+pub fn normalize_plaintext_whitespace(text: &str) -> String {
+    // 1. Normalise CRLF and lone CR to LF
+    let mut normalized = String::with_capacity(text.len());
+    let mut chars = text.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c == '\r' {
+            if chars.peek() == Some(&'\n') {
+                chars.next();
+            }
+            normalized.push('\n');
+        } else {
+            normalized.push(c);
+        }
+    }
+
+    // 4. Collapse three or more consecutive newlines to two (one blank line)
+    // 5. Strip leading and trailing blank lines
+    let mut out = String::new();
+    let mut consecutive_blanks = 0;
+
+    for line in normalized.split('\n') {
+        if line.trim().is_empty() {
+            consecutive_blanks += 1;
+            if consecutive_blanks <= 1 && !out.is_empty() {
+                out.push('\n');
+            }
+        } else {
+            if consecutive_blanks > 0 && !out.is_empty() {
+                out.push('\n');
+            }
+            consecutive_blanks = 0;
+            if !out.is_empty() && !out.ends_with('\n') {
+                out.push('\n');
+            }
+            out.push_str(line);
+        }
+    }
+
+    out.trim_matches(['\n', '\r']).to_string()
 }
 
 /// Derives title per MIME-AND-TEXT.md §12.1.
