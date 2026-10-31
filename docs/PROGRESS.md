@@ -11,7 +11,7 @@ Phase 1 (`core` + `store`) and **Phase 2A (`crates/extract` + MIME fixtures & de
 #### A. Phase 1: Foundation (`crates/core` & `crates/store`)
 - **`crates/core`**:
   - Implemented domain primitives with zero dependencies (no tokio, rusqlite, Qt, network, or filesystem).
-  - Domain structs: [`Account`](file:///home/nvalk1/debloatmail/crates/core/src/account.rs), [`Mailbox`](file:///home/nvalk1/debloatmail/crates/core/src/mailbox.rs), [`Item`](file:///home/nvalk1/debloatmail/crates/core/src/item.rs), [`StreamItem`](file:///home/nvalk1/debloatmail/crates/core/src/stream.rs), [`Cursor`](file:///home/nvalk1/debloatmail/crates/core/src/stream.rs), [`ThreadSummary`](file:///home/nvalk1/debloatmail/crates/core/src/thread.rs), and [`MessageOp`](file:///home/nvalk1/debloatmail/crates/core/src/message.rs).
+  - Domain structs: [`Account`](../crates/core/src/account.rs), [`Mailbox`](../crates/core/src/mailbox.rs), [`Item`](../crates/core/src/item.rs), [`StreamItem`](../crates/core/src/stream.rs), [`Cursor`](../crates/core/src/stream.rs), [`ThreadSummary`](../crates/core/src/thread.rs), and [`MessageOp`](../crates/core/src/message.rs).
   - 9 unit tests passing.
 - **`crates/store`**:
   - SQLite storage engine with bundled rusqlite and FTS5 full-text indexing.
@@ -84,10 +84,10 @@ Phase 1 (`core` + `store`) and **Phase 2A (`crates/extract` + MIME fixtures & de
 
 ### 5. Security Hardening (Completed)
 
-- **Secure DB file creation** – SQLite database files are created with mode 0600 and flags `O_EXCL|O_NOFOLLOW` to prevent symlink attacks. Implemented in [`secure_file.rs`](file:///home/nvalk1/debloatmail/crates/store/src/secure_file.rs). *(Docs: [SECURITY.md §8.5](file:///home/nvalk1/debloatmail/docs/SECURITY.md#85-permissions--secure-file-creation))*
-- **Feed parser hardening** – XML external entities and DTD processing are disabled in the RSS/Atom parser to mitigate XXE and Billion‑Laughs attacks. Implemented in [`parse.rs`](file:///home/nvalk1/debloatmail/crates/feeds/src/parse.rs). *(Docs: [SECURITY.md §6.2](file:///home/nvalk1/debloatmail/docs/SECURITY.md#62-xml-external-entity-protection))*
-- **Clippy lint compliance** – Fixed inner doc comment issue in `limits.rs` to satisfy `clippy::empty_line_after_doc_comments`. *(Docs: [SECURITY.md §8.3](file:///home/nvalk1/debloatmail/docs/SECURITY.md#83-lint-compliance))*
-- **Low‑level system calls** – Added `libc` dependency to use `open` flags securely in `crates/store`. *(Docs: [SECURITY.md §8.4](file:///home/nvalk1/debloatmail/docs/SECURITY.md#84-low-level-system-calls))*
+- **Secure DB file creation** – SQLite database files are created with mode 0600 and flags `O_EXCL|O_NOFOLLOW` to prevent symlink attacks. Implemented in [`secure_file.rs`](../crates/store/src/secure_file.rs). *(Docs: [SECURITY.md §8.5](SECURITY.md#85-permissions--secure-file-creation))*
+- **Feed parser hardening** – XML external entities and DTD processing are disabled in the RSS/Atom parser to mitigate XXE and Billion‑Laughs attacks. Implemented in [`parse.rs`](../crates/feeds/src/parse.rs). *(Docs: [SECURITY.md §6.2](SECURITY.md#62-xml-external-entity-protection))*
+- **Clippy lint compliance** – Fixed inner doc comment issue in `limits.rs` to satisfy `clippy::empty_line_after_doc_comments`. *(Docs: [SECURITY.md §8.3](SECURITY.md#83-lint-compliance))*
+- **Low‑level system calls** – Added `libc` dependency to use `open` flags securely in `crates/store`. *(Docs: [SECURITY.md §8.4](SECURITY.md#84-low-level-system-calls))*
 
 ### 4. Upcoming Phases
 
