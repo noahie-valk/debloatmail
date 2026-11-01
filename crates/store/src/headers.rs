@@ -1,4 +1,4 @@
-use rusqlite::{params, Connection, Row};
+use rusqlite::{Connection, Row, params};
 use std::str::FromStr;
 
 use debloatmail_core::{
@@ -6,8 +6,8 @@ use debloatmail_core::{
     ThreadId, Timestamp,
 };
 
-use crate::schema::bump_revision;
 use crate::StoreError;
+use crate::schema::bump_revision;
 
 /// Input data for recording a mail header during sync.
 pub struct NewMailHeader<'a> {
@@ -95,7 +95,7 @@ pub fn insert_mail_header(conn: &Connection, h: &NewMailHeader) -> Result<i64, S
             h.cc_addrs_json.unwrap_or("[]"),
             h.reply_to,
             h.sort_at,
-            h.size_bytes,
+            h.size_bytes.map(|s| s as i64),
             h.flags_local,
         ],
     )?;
@@ -175,13 +175,13 @@ pub fn query_stream(
     cursor: Option<&Cursor>,
     limit: u32,
 ) -> Result<Vec<Item>, StoreError> {
-    if let Some(c) = cursor {
-        if c.sort != spec.sort {
-            return Err(StoreError::InvalidCursor(format!(
-                "cursor sort {:?} does not match stream sort {:?}",
-                c.sort, spec.sort
-            )));
-        }
+    if let Some(c) = cursor
+        && c.sort != spec.sort
+    {
+        return Err(StoreError::InvalidCursor(format!(
+            "cursor sort {:?} does not match stream sort {:?}",
+            c.sort, spec.sort
+        )));
     }
 
     let mut query = String::from(

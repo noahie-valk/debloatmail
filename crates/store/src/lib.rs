@@ -31,14 +31,14 @@ pub enum StoreError {
     InvalidCursor(String),
 }
 
-pub use feed_items::{purge_feed, soft_remove_feed, upsert_feed_item, UpsertFeedItem};
+pub use feed_items::{UpsertFeedItem, purge_feed, soft_remove_feed, upsert_feed_item};
 pub use flags::{queue_flag_op, set_answered, set_hidden, set_starred, set_unread};
-pub use headers::{evict_mail_body, insert_mail_header, query_stream, NewMailHeader};
+pub use headers::{NewMailHeader, evict_mail_body, insert_mail_header, query_stream};
 pub use schema::{
-    bump_revision, get_revision, get_user_version, initialize_schema, open_in_memory,
-    open_read_only, open_store, CURRENT_SCHEMA_VERSION,
+    CURRENT_SCHEMA_VERSION, bump_revision, get_revision, get_user_version, initialize_schema,
+    open_in_memory, open_read_only, open_store,
 };
-pub use search::{parse_search_query, search_items, ParsedSearch};
+pub use search::{ParsedSearch, parse_search_query, search_items};
 
 #[cfg(test)]
 mod tests {

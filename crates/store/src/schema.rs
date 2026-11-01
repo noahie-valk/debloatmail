@@ -1,8 +1,8 @@
 use rusqlite::{Connection, OpenFlags};
 use std::path::Path;
 
-use crate::secure_file;
 use crate::StoreError;
+use crate::secure_file;
 
 pub const CURRENT_SCHEMA_VERSION: u32 = 1;
 pub const INIT_SQL: &str = include_str!("migrations/0001_init.sql");

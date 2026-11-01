@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use debloatmail_extract::{extract_message, ExtractedMessage, Limits};
+use debloatmail_extract::{ExtractedMessage, Limits, extract_message};
 
 fn format_extracted(msg: &ExtractedMessage) -> String {
     let mut out = String::new();

@@ -37,11 +37,11 @@ pub fn decode_bytes(bytes: &[u8], declared_charset: Option<&str>) -> String {
     // 3. The declared charset resolved through `charset`
     if let Some(declared) = declared_charset {
         let trimmed = declared.trim().trim_matches('"').trim_matches('\'');
-        if !trimmed.is_empty() {
-            if let Some(cs) = charset::Charset::for_label(trimmed.as_bytes()) {
-                let (decoded, _, _) = cs.decode(bytes);
-                return decoded.into_owned();
-            }
+        if !trimmed.is_empty()
+            && let Some(cs) = charset::Charset::for_label(trimmed.as_bytes())
+        {
+            let (decoded, _, _) = cs.decode(bytes);
+            return decoded.into_owned();
         }
     }
 

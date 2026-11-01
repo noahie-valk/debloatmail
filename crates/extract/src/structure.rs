@@ -1,5 +1,5 @@
 use debloatmail_core::item::BodyState;
-use mail_parser::{Message, MessagePart, MimeHeaders};
+use mail_parser::MessagePart;
 
 use crate::charset;
 use crate::error::ExtractError;
@@ -50,7 +50,6 @@ enum PartClassification {
 }
 
 struct WalkState<'a> {
-    message: &'a Message<'a>,
     limits: &'a Limits,
     attachments: Vec<ExtractedAttachment>,
     body_candidate: Option<(SelectedBodyPart<'a>, bool)>, // (part, is_html)
@@ -59,7 +58,7 @@ struct WalkState<'a> {
 }
 
 struct SelectedBodyPart<'a> {
-    part: &'a MessagePart<'a>,
+    part: MessagePart<'a>,
     section_id: String,
 }
 
@@ -133,19 +132,21 @@ pub fn extract_message(
         .into_iter()
         .next();
     let message_id = message.message_id().map(header::clean_msg_id);
-    let in_reply_to = message.in_reply_to().as_text().map(header::clean_msg_id);
+    let in_reply_to = message
+        .in_reply_to()
+        .and_then(|t| t.first())
+        .map(header::clean_msg_id);
 
     let mut references = Vec::new();
     for h in message.headers() {
-        if h.name.as_str().eq_ignore_ascii_case("references") {
-            references.extend(header::extract_message_ids(&h.value));
+        if h.name().as_str().eq_ignore_ascii_case("references") {
+            references.extend(header::extract_message_ids(&h.value()));
         }
     }
 
     let date = message.date().map(|d| d.to_timestamp());
 
     let mut state = WalkState {
-        message: &message,
         limits,
         attachments: Vec::new(),
         body_candidate: None,
@@ -153,51 +154,28 @@ pub fn extract_message(
         warnings,
     };
 
-    if !message.parts.is_empty() {
-        let root_part = &message.parts[0];
-        if root_part.is_multipart() {
-            walk_multipart(0, "", &mut state, 1);
-        } else {
-            walk_single_part(0, "1", &mut state);
-        }
+    let root_part = message.root_part();
+    if root_part.is_multipart() {
+        walk_multipart(root_part, "", &mut state, 1);
+    } else {
+        walk_single_part(root_part, "1", &mut state);
     }
 
     // Process selected body
     let (body_text, body_state) = if state.is_encrypted {
         ("[encrypted message]".to_string(), BodyState::Cached)
     } else if let Some((selected, is_html)) = state.body_candidate {
-        let recovered_bytes;
-        let raw_part_bytes = if let mail_parser::PartType::Text(ref text) = selected.part.body {
-            if text.chars().all(|c| (c as u32) <= 0xFF) {
-                let candidate: Vec<u8> = text.chars().map(|c| c as u8).collect();
-                if std::str::from_utf8(&candidate).is_ok() {
-                    recovered_bytes = candidate;
-                    &recovered_bytes[..]
-                } else {
-                    selected.part.contents()
-                }
-            } else {
-                selected.part.contents()
-            }
-        } else {
-            selected.part.contents()
-        };
+        let raw_part_bytes = selected.part.decoded();
 
         // Check for compressed Content-Encoding per §7 & §14 (treat as opaque, do not decompress)
-        let has_compression = selected.part.headers.iter().any(|h| {
-            h.name.as_str().eq_ignore_ascii_case("content-encoding")
-                && (h
-                    .value
-                    .as_text()
-                    .unwrap_or("")
-                    .to_ascii_lowercase()
-                    .contains("gzip")
-                    || h.value
-                        .as_text()
-                        .unwrap_or("")
-                        .to_ascii_lowercase()
-                        .contains("deflate"))
-        });
+        let has_compression = selected
+            .part
+            .headers()
+            .get("content-encoding")
+            .is_some_and(|h| {
+                let val = h.value().as_text().unwrap_or("").to_ascii_lowercase();
+                val.contains("gzip") || val.contains("deflate")
+            });
 
         if has_compression {
             state.warnings.push(format!(
@@ -206,35 +184,23 @@ pub fn extract_message(
             ));
             (String::new(), BodyState::Cached)
         } else {
-            let declared_charset = selected.part.content_type().and_then(|ct| {
-                ct.attributes().and_then(|attrs| {
-                    attrs
-                        .iter()
-                        .find(|a| a.name.eq_ignore_ascii_case("charset"))
-                        .map(|a| a.value.as_ref())
-                })
-            });
+            let declared_charset = selected
+                .part
+                .content_type()
+                .and_then(|ct| ct.attribute("charset"));
 
-            let decoded_text = charset::decode_bytes(raw_part_bytes, declared_charset);
+            let decoded_text = charset::decode_bytes(&raw_part_bytes, declared_charset);
 
             let rendered = if is_html {
                 html::html_to_plaintext(&decoded_text, None)
             } else {
                 let is_flowed = selected.part.content_type().is_some_and(|ct| {
-                    ct.attributes().is_some_and(|attrs| {
-                        attrs.iter().any(|a| {
-                            a.name.eq_ignore_ascii_case("format")
-                                && a.value.eq_ignore_ascii_case("flowed")
-                        })
-                    })
+                    ct.attribute("format")
+                        .is_some_and(|f| f.eq_ignore_ascii_case("flowed"))
                 });
                 let delsp = selected.part.content_type().is_some_and(|ct| {
-                    ct.attributes().is_some_and(|attrs| {
-                        attrs.iter().any(|a| {
-                            a.name.eq_ignore_ascii_case("delsp")
-                                && a.value.eq_ignore_ascii_case("yes")
-                        })
-                    })
+                    ct.attribute("delsp")
+                        .is_some_and(|d| d.eq_ignore_ascii_case("yes"))
                 });
                 normalize_plaintext_whitespace(&flowed::unwrap_flowed(
                     &decoded_text,
@@ -286,9 +252,8 @@ pub fn extract_message(
     })
 }
 
-fn walk_single_part<'a>(part_id: usize, section_id: &str, state: &mut WalkState<'a>) {
-    let part = &state.message.parts[part_id];
-    let class = classify_part(part);
+fn walk_single_part<'a>(part: MessagePart<'a>, section_id: &str, state: &mut WalkState<'a>) {
+    let class = classify_part(&part);
 
     match class {
         PartClassification::BodyCandidate { is_html } => {
@@ -301,16 +266,16 @@ fn walk_single_part<'a>(part_id: usize, section_id: &str, state: &mut WalkState<
             ));
         }
         PartClassification::Attachment => {
-            record_attachment(part, section_id, state);
+            record_attachment(&part, section_id, state);
         }
         PartClassification::Container => {
-            walk_multipart(part_id, section_id, state, 1);
+            walk_multipart(part, section_id, state, 1);
         }
     }
 }
 
 fn walk_multipart<'a>(
-    part_id: usize,
+    part: MessagePart<'a>,
     parent_section: &str,
     state: &mut WalkState<'a>,
     depth: usize,
@@ -323,48 +288,45 @@ fn walk_multipart<'a>(
         return;
     }
 
-    let part = &state.message.parts[part_id];
-
     // Check if multipart/encrypted per §6.2
-    if is_subtype(part, "multipart", "encrypted") {
+    if is_subtype(&part, "multipart", "encrypted") {
         state.is_encrypted = true;
         return;
     }
 
     let is_alt_or_report =
-        is_subtype(part, "multipart", "alternative") || is_subtype(part, "multipart", "report");
-    let is_signed = is_subtype(part, "multipart", "signed");
+        is_subtype(&part, "multipart", "alternative") || is_subtype(&part, "multipart", "report");
+    let is_signed = is_subtype(&part, "multipart", "signed");
 
-    let subparts = match part.sub_parts() {
-        Some(sp) => sp,
-        None => return,
-    };
+    let children: Vec<MessagePart<'a>> = part.children().collect();
+    if children.is_empty() {
+        return;
+    }
 
     if is_alt_or_report {
         // multipart/alternative (§6.2):
         // 1. Prefer text/plain if present and not empty/whitespace-only.
         // 2. Otherwise fall through to text/html.
-        let mut text_candidate: Option<(usize, String)> = None; // (part_idx, section_id)
-        let mut html_candidate: Option<(usize, String)> = None;
+        let mut text_candidate: Option<(MessagePart<'a>, String)> = None;
+        let mut html_candidate: Option<(MessagePart<'a>, String)> = None;
 
-        for (idx, &sub_id) in subparts.iter().enumerate() {
+        for (idx, sub_part) in children.iter().enumerate() {
             let section = format_sub_section(parent_section, idx + 1);
-            let sub_part = &state.message.parts[sub_id as usize];
             if sub_part.is_multipart() {
                 // Nested container in alternative
-                walk_multipart(sub_id as usize, &section, state, depth + 1);
+                walk_multipart(*sub_part, &section, state, depth + 1);
             } else {
                 let class = classify_part(sub_part);
                 match class {
                     PartClassification::BodyCandidate { is_html: false } => {
-                        let text = charset::decode_bytes(sub_part.contents(), None);
+                        let text = charset::decode_bytes(&sub_part.decoded(), None);
                         if !text.trim().is_empty() {
-                            text_candidate = Some((sub_id as usize, section));
+                            text_candidate = Some((*sub_part, section));
                         }
                     }
                     PartClassification::BodyCandidate { is_html: true } => {
                         if html_candidate.is_none() {
-                            html_candidate = Some((sub_id as usize, section));
+                            html_candidate = Some((*sub_part, section));
                         }
                     }
                     PartClassification::Attachment => {
@@ -375,46 +337,44 @@ fn walk_multipart<'a>(
             }
         }
 
-        if let Some((pid, sec)) = text_candidate {
+        if let Some((sub_part, sec)) = text_candidate {
             if state.body_candidate.is_none() {
                 state.body_candidate = Some((
                     SelectedBodyPart {
-                        part: &state.message.parts[pid],
+                        part: sub_part,
                         section_id: sec,
                     },
                     false,
                 ));
             }
-        } else if let Some((pid, sec)) = html_candidate {
-            if state.body_candidate.is_none() {
-                state.body_candidate = Some((
-                    SelectedBodyPart {
-                        part: &state.message.parts[pid],
-                        section_id: sec,
-                    },
-                    true,
-                ));
-            }
+        } else if let Some((sub_part, sec)) = html_candidate
+            && state.body_candidate.is_none()
+        {
+            state.body_candidate = Some((
+                SelectedBodyPart {
+                    part: sub_part,
+                    section_id: sec,
+                },
+                true,
+            ));
         }
     } else if is_signed {
         // multipart/signed (§6.2): first part is content, signature part is discarded
-        if let Some(&first_id) = subparts.first() {
+        if let Some(first_part) = children.first() {
             let section = format_sub_section(parent_section, 1);
-            let sub_part = &state.message.parts[first_id as usize];
-            if sub_part.is_multipart() {
-                walk_multipart(first_id as usize, &section, state, depth + 1);
+            if first_part.is_multipart() {
+                walk_multipart(*first_part, &section, state, depth + 1);
             } else {
-                walk_single_part(first_id as usize, &section, state);
+                walk_single_part(*first_part, &section, state);
             }
         }
     } else {
         // multipart/mixed, multipart/related, or standard multipart
-        for (idx, &sub_id) in subparts.iter().enumerate() {
+        for (idx, sub_part) in children.iter().enumerate() {
             let section = format_sub_section(parent_section, idx + 1);
-            let sub_part = &state.message.parts[sub_id as usize];
 
             if sub_part.is_multipart() {
-                walk_multipart(sub_id as usize, &section, state, depth + 1);
+                walk_multipart(*sub_part, &section, state, depth + 1);
             } else {
                 let class = classify_part(sub_part);
                 match class {
@@ -422,7 +382,7 @@ fn walk_multipart<'a>(
                         if state.body_candidate.is_none() {
                             state.body_candidate = Some((
                                 SelectedBodyPart {
-                                    part: sub_part,
+                                    part: *sub_part,
                                     section_id: section,
                                 },
                                 is_html,
@@ -436,7 +396,7 @@ fn walk_multipart<'a>(
                         record_attachment(sub_part, &section, state);
                     }
                     PartClassification::Container => {
-                        walk_multipart(sub_id as usize, &section, state, depth + 1);
+                        walk_multipart(*sub_part, &section, state, depth + 1);
                     }
                 }
             }
@@ -454,10 +414,10 @@ fn format_sub_section(parent: &str, index: usize) -> String {
 
 fn classify_part(part: &MessagePart<'_>) -> PartClassification {
     // 1. Content-Disposition: attachment -> Attachment (§6.1 #1)
-    if let Some(cd) = part.content_disposition() {
-        if cd.c_type.eq_ignore_ascii_case("attachment") {
-            return PartClassification::Attachment;
-        }
+    if let Some(cd) = part.content_disposition()
+        && cd.is_attachment()
+    {
+        return PartClassification::Attachment;
     }
 
     // 2. A filename/name parameter is present -> Attachment (§6.1 #2)
@@ -481,10 +441,12 @@ fn classify_part(part: &MessagePart<'_>) -> PartClassification {
     }
 
     // 6. Type is text/plain or text/html -> Body candidate (§6.1 #6)
-    if is_subtype(part, "text", "plain") || (part.is_text() && !part.is_text_html()) {
+    if is_subtype(part, "text", "plain")
+        || (part.is_text() && !matches!(part.kind(), mail_parser::PartKind::Html))
+    {
         return PartClassification::BodyCandidate { is_html: false };
     }
-    if is_subtype(part, "text", "html") || part.is_text_html() {
+    if is_subtype(part, "text", "html") || matches!(part.kind(), mail_parser::PartKind::Html) {
         return PartClassification::BodyCandidate { is_html: true };
     }
 
@@ -501,17 +463,17 @@ fn record_attachment(part: &MessagePart<'_>, section_id: &str, state: &mut WalkS
         return;
     }
 
-    let raw_bytes = part.contents();
+    let raw_bytes = part.decoded();
     let is_pdf = raw_bytes.starts_with(b"%PDF-");
 
     let filename = part.attachment_name().map(|s| s.trim().to_string());
     let mime_type = part
         .content_type()
         .map_or("application/octet-stream".to_string(), |ct| {
-            let subtype = ct.c_subtype.as_deref().unwrap_or("octet-stream");
+            let subtype = ct.subtype().unwrap_or("octet-stream");
             format!(
                 "{}/{}",
-                ct.c_type.to_ascii_lowercase(),
+                ct.ctype().to_ascii_lowercase(),
                 subtype.to_ascii_lowercase()
             )
         });
@@ -533,15 +495,14 @@ fn record_attachment(part: &MessagePart<'_>, section_id: &str, state: &mut WalkS
 
 fn is_type(part: &MessagePart<'_>, main_type: &str) -> bool {
     part.content_type()
-        .is_some_and(|ct| ct.c_type.eq_ignore_ascii_case(main_type))
+        .is_some_and(|ct| ct.ctype().eq_ignore_ascii_case(main_type))
 }
 
 fn is_subtype(part: &MessagePart<'_>, main_type: &str, sub_type: &str) -> bool {
     part.content_type().is_some_and(|ct| {
-        ct.c_type.eq_ignore_ascii_case(main_type)
+        ct.ctype().eq_ignore_ascii_case(main_type)
             && ct
-                .c_subtype
-                .as_deref()
+                .subtype()
                 .is_some_and(|s| s.eq_ignore_ascii_case(sub_type))
     })
 }

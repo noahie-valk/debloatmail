@@ -101,14 +101,14 @@ split that must not blur:
 
 | Job | Crate home | Version | Why this one |
 |---|---|---|---|
-| MIME structure + charset decode | `extract` — **`mail-parser`** | 0.11.9 | RFC 5322 + MIME 2045–2049, decodes 41 charsets including UTF-7, zero-copy `Cow<str>` output |
+| MIME structure + charset decode | `extract` — **`mail-parser`** | 1.0.0 | RFC 5322 + MIME 2045–2049, decodes 41 charsets including UTF-7, zero-copy `Cow<str>` output |
 | Charset → UTF-8 | `extract` — **`charset`** | latest | Wraps `encoding_rs` and adds the UTF-7 and JavaMail-label handling that email actually needs |
 | Charset sniffing (last resort) | `extract` — **`chardetng`** | 0.1.x | Mozilla's detector; designed to share `encoding_rs` with no extra weight |
 | HTML → text | `extract` — **`html2text`** | 0.17.1 | Servo's `html5ever` parser, MIT, configurable block/link rendering |
 | Feed XML/JSON (document level) | `feeds` — **`feed-rs`** | latest | One model over Atom, RSS, and JSON Feed, auto-detecting format |
 | Raw XML (feed internals) | `feeds` — via `feed-rs` | — | Do not add a second XML parser |
 
-`mail-parser` v0.11.9 is current and conforms to RFC 5322, MIME (RFC 2045–2049), and
+`mail-parser` v1.0.0 is current and conforms to RFC 5322, MIME (RFC 2045–2049), and
 decodes 41 character sets including obsolete ones such as UTF-7. Its model follows
 RFC 8621 §4.1.4: rather than handing back a nested tree, it exposes text body parts,
 HTML body parts, and attachments — which is exactly the shape this pipeline wants. It

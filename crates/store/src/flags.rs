@@ -1,7 +1,7 @@
-use rusqlite::{params, Connection};
+use rusqlite::{Connection, params};
 
-use crate::schema::bump_revision;
 use crate::StoreError;
+use crate::schema::bump_revision;
 
 /// Set the unread flag for an item (by internal id).
 pub fn set_unread(conn: &Connection, item_id: i64, unread: bool) -> Result<(), StoreError> {

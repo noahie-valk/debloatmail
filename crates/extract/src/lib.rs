@@ -17,7 +17,7 @@ pub use error::ExtractError;
 pub use html::html_to_plaintext;
 pub use limits::Limits;
 pub use structure::{
-    derive_excerpt, derive_title, extract_message, ExtractedAttachment, ExtractedMessage,
+    ExtractedAttachment, ExtractedMessage, derive_excerpt, derive_title, extract_message,
 };
 
 /// The current extractor version, recorded in `item_text.extractor_version` (MIME-AND-TEXT.md §18).

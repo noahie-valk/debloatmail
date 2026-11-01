@@ -2,8 +2,8 @@ use rusqlite::Connection;
 
 use debloatmail_core::{Item, ItemKind};
 
-use crate::headers::row_to_item;
 use crate::StoreError;
+use crate::headers::row_to_item;
 
 /// Structured parsed search query separating FTS5 terms and SQL filters.
 #[derive(Debug, Default, PartialEq, Eq)]

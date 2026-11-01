@@ -8,11 +8,11 @@ ReplyTo: None
 MessageId: trunc-b64-1@example.org
 Date: 1792239600
 BodyState: Cached
-Excerpt: Hello world!
+Excerpt: Hello world!!!
 HasAttachments: false
 Attachments:
   (none)
 Warnings:
   (none)
 ---
-Hello world!
+Hello world!!!

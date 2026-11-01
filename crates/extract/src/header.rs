@@ -1,4 +1,4 @@
-use mail_parser::{Address, HeaderValue, Message};
+use mail_parser::{HeaderValue, Message};
 
 /// Normalizes subject according to MIME-AND-TEXT.md §4.5 for threading.
 ///
@@ -53,16 +53,15 @@ fn strip_prefix_case_insensitive(s: &str) -> Option<&str> {
     }
 
     // Check for patterns like "re[2]:", "re(2):", "fwd[1]:"
-    if lower.starts_with("re[")
+    if (lower.starts_with("re[")
         || lower.starts_with("re(")
         || lower.starts_with("fwd[")
-        || lower.starts_with("fwd(")
+        || lower.starts_with("fwd("))
+        && let Some(colon) = s.find(':')
     {
-        if let Some(colon) = s.find(':') {
-            let prefix_part = &s[..colon];
-            if is_bracketed_prefix(prefix_part) {
-                return Some(&s[colon + 1..]);
-            }
+        let prefix_part = &s[..colon];
+        if is_bracketed_prefix(prefix_part) {
+            return Some(&s[colon + 1..]);
         }
     }
 
@@ -94,94 +93,46 @@ fn is_bracketed_prefix(p: &str) -> bool {
 
 /// Derives `(author, from_addr)` per MIME-AND-TEXT.md §4.4 and §12.2.
 pub fn derive_author(message: &Message<'_>) -> (Option<String>, Option<String>) {
-    if let Some(from_header) = message.from() {
-        if let Some(first_addr) = extract_first_address(from_header) {
-            let addr = first_addr.address.map(|s| s.trim().to_string());
-            let name = first_addr.name.map(|s| s.trim().to_string());
+    if let Some(from_header) = message.from()
+        && let Some(first_addr) = from_header.first()
+    {
+        let addr = first_addr.address().map(|s| s.trim().to_string());
+        let name = first_addr.name().map(|s| s.trim().to_string());
 
-            let result = match (name, addr) {
-                (Some(name), Some(addr)) if !name.is_empty() => Some((Some(name), Some(addr))),
-                (None, Some(addr)) | (Some(_), Some(addr)) => {
-                    Some((Some(addr.clone()), Some(addr)))
-                }
-                (Some(name), None) if !name.is_empty() => Some((Some(name), None)),
-                _ => None,
-            };
-            if let Some(res) = result {
-                return res;
-            }
+        let result = match (name, addr) {
+            (Some(name), Some(addr)) if !name.is_empty() => Some((Some(name), Some(addr))),
+            (None, Some(addr)) | (Some(_), Some(addr)) => Some((Some(addr.clone()), Some(addr))),
+            (Some(name), None) if !name.is_empty() => Some((Some(name), None)),
+            _ => None,
+        };
+        if let Some(res) = result {
+            return res;
         }
     }
 
     // Fallback if parsing failed but header is present as raw text
     for header in message.headers() {
-        if header.name.as_str().eq_ignore_ascii_case("from") {
-            let raw = header.value.as_text().map(|s| s.trim().to_string());
-            if let Some(r) = raw {
-                if !r.is_empty() {
-                    return (Some(r), None);
-                }
-            }
+        if header.name().as_str().eq_ignore_ascii_case("from")
+            && let Some(r) = header.value().as_text().map(|s| s.trim().to_string())
+            && !r.is_empty()
+        {
+            return (Some(r), None);
         }
     }
 
     (None, None)
 }
 
-struct SimpleAddr<'a> {
-    name: Option<&'a str>,
-    address: Option<&'a str>,
-}
-
-fn extract_first_address<'a>(addr: &'a Address<'a>) -> Option<SimpleAddr<'a>> {
-    match addr {
-        Address::List(list) => list.first().map(|a| SimpleAddr {
-            name: a.name.as_deref(),
-            address: a.address.as_deref(),
-        }),
-        Address::Group(groups) => {
-            for g in groups {
-                if let Some(first) = g.addresses.first() {
-                    return Some(SimpleAddr {
-                        name: first.name.as_deref(),
-                        address: first.address.as_deref(),
-                    });
-                }
-            }
-            None
-        }
-    }
-}
-
-/// Extracts all email addresses from an `Address` header field.
-pub fn extract_all_addresses(addr: Option<&Address<'_>>) -> Vec<String> {
+/// Extracts all email addresses from an `AddressList` header field.
+pub fn extract_all_addresses(addr: Option<mail_parser::AddressList<'_>>) -> Vec<String> {
     let mut results = Vec::new();
-    let addr = match addr {
-        Some(a) => a,
-        None => return results,
-    };
+    let Some(addr) = addr else { return results };
 
-    match addr {
-        Address::List(list) => {
-            for a in list {
-                if let Some(email) = &a.address {
-                    let trimmed = email.trim();
-                    if !trimmed.is_empty() {
-                        results.push(trimmed.to_string());
-                    }
-                }
-            }
-        }
-        Address::Group(groups) => {
-            for g in groups {
-                for a in &g.addresses {
-                    if let Some(email) = &a.address {
-                        let trimmed = email.trim();
-                        if !trimmed.is_empty() {
-                            results.push(trimmed.to_string());
-                        }
-                    }
-                }
+    for mailbox in addr.mailboxes() {
+        if let Some(email) = mailbox.address() {
+            let trimmed = email.trim();
+            if !trimmed.is_empty() {
+                results.push(trimmed.to_string());
             }
         }
     }
@@ -207,7 +158,7 @@ pub fn extract_message_ids(val: &HeaderValue<'_>) -> Vec<String> {
             }
         }
         HeaderValue::TextList(list) => {
-            for s in list {
+            for s in list.iter() {
                 for part in s.split_whitespace() {
                     let cleaned = clean_msg_id(part);
                     if !cleaned.is_empty() {

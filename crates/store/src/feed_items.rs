@@ -1,7 +1,7 @@
-use rusqlite::{params, Connection, OptionalExtension};
+use rusqlite::{Connection, OptionalExtension, params};
 
-use crate::schema::bump_revision;
 use crate::StoreError;
+use crate::schema::bump_revision;
 
 /// Input for upserting a feed article.
 pub struct UpsertFeedItem<'a> {
