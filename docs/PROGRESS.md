@@ -98,7 +98,16 @@ Phase 1 (`core` + `store`), **Phase 2A (`crates/extract` + MIME fixtures & deter
   - [`scripts/check-invariants.sh`](../scripts/check-invariants.sh): Added `last_activity` to the timestamp field allowlist per `docs/DATA-MODEL.md` §4.1 and fixed the clean-run exit code logic.
   - [`scripts/run_security_checks.sh`](../scripts/run_security_checks.sh): Fully clean verification across `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace` (51/51 tests passing including all 33 golden MIME fixtures), and `cargo audit` (0 vulnerabilities).
 
-### 7. Upcoming Phases
+### 7. License & Dependency Hygiene (Completed — 2026-11-01)
+
+- **MIT license declared** across all workspace crates via `license = "MIT"` in `[workspace.package]` and `license.workspace = true` in each crate's `Cargo.toml`.
+- **`crates/feeds` joined the workspace** (`members` list in root `Cargo.toml`); its `version`, `edition`, and `license` now inherit from `[workspace.package]`. Edition bumped to `2024`.
+- **`deny.toml` configured** with `cargo-deny` license allow-list (MIT, Apache-2.0, BSD-2/3, ISC, Zlib, Unlicense, MPL-2.0, CDLA-Permissive-2.0), security advisory enforcement, and explicit bans on `io-email`, `io-keyring`, OpenSSL, curl, and WebView crates.
+- **`scripts/check-deny.sh`** added — run `./scripts/check-deny.sh` at the end of any session to check licenses, bans, and advisories. Accepts an optional check name (e.g. `./scripts/check-deny.sh licenses`). Requires `cargo-deny` (`cargo install cargo-deny --locked`).
+- **`data/org.noahie.debloatmail.metainfo.xml`** created with `<project_license>MIT</project_license>` and basic AppStream metadata.
+- Fixed pre-existing bug: `reqwest` feature flag renamed from `rustls-tls` to `rustls` in reqwest 0.13.
+
+### 8. Upcoming Phases
 
 #### Phase 2C – Engine & Protocol State Machines (`crates/engine`)
 - Sans‑I/O IMAP and SMTP state machines using pimalaya (`io-imap`, `io-smtp`).

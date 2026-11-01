@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>org.noahie.debloatmail</id>
+  <name>debloatmail</name>
+  <summary>A lightweight email and RSS/Atom client</summary>
+
+  <metadata_license>MIT</metadata_license>
+  <project_license>MIT</project_license>
+
+  <description>
+    <p>
+      debloatmail is a lightweight Linux desktop email and RSS/Atom client
+      written in Rust with a Qt 6 / Kirigami UI. A less-bloated, less-featured
+      alternative to Thunderbird — plaintext-first, no HTML rendering, no
+      calendar or contacts.
+    </p>
+  </description>
+
+  <url type="homepage">https://github.com/nvalk1/debloatmail</url>
+
+  <developer id="org.noahie">
+    <name>Noahie Valk</name>
+  </developer>
+
+  <launchable type="desktop-id">org.noahie.debloatmail.desktop</launchable>
+
+  <releases>
+    <release version="0.1.0" date="2026-11-01">
+      <description><p>Initial release.</p></description>
+    </release>
+  </releases>
+
+  <content_rating type="oars-1.1"/>
+</component>

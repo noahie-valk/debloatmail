@@ -1,0 +1,64 @@
+# cargo-deny configuration
+# https://embarkstudios.github.io/cargo-deny/
+
+[graph]
+# Resolve the full dependency graph, including dev-dependencies.
+all-features = false
+
+# ---------------------------------------------------------------------------
+# Licenses
+# ---------------------------------------------------------------------------
+[licenses]
+# Require all dependencies to carry an OSI-approved permissive license, or
+# one of the weak-copyleft licenses we've explicitly reviewed and accepted.
+version = 2
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Unicode-3.0",
+    "Zlib",
+    "Unlicense",
+    # MPL-2.0: file-scoped weak copyleft; compatible with MIT.
+    # Used by: uniffi (planned), and transitive deps of zbus.
+    "MPL-2.0",
+    # CDLA-Permissive-2.0: permissive data license used by webpki-root-certs
+    # (a transitive dep of reqwest/rustls-platform-verifier).
+    # Contains only Mozilla's curated CA certificate data, not code.
+    "CDLA-Permissive-2.0",
+]
+# Deny any license not in the allow list above.
+unused-allowed-license = "allow"
+
+# ---------------------------------------------------------------------------
+# Bans
+# ---------------------------------------------------------------------------
+[bans]
+# Warn on duplicate versions of the same crate (helps keep dep tree lean).
+multiple-versions = "warn"
+# Deny crates we have explicitly decided never to use.
+deny = [
+    # Deprecated/frozen pimalaya crates (per GEMINI.md).
+    { name = "io-email" },
+    { name = "io-keyring" },
+    # No HTML rendering ever.
+    { name = "webkit2gtk" },
+    { name = "webkitgtk" },
+    # No curl shims (HTTP only via reqwest/rustls in crates/feeds).
+    { name = "curl" },
+    { name = "curl-sys" },
+    # No OpenSSL — rustls only.
+    { name = "openssl" },
+    { name = "openssl-sys" },
+]
+
+# ---------------------------------------------------------------------------
+# Advisories
+# ---------------------------------------------------------------------------
+[advisories]
+# Deny crates with known security vulnerabilities in the RustSec advisory DB.
+version = 2
+ignore = []

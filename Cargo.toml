@@ -4,11 +4,13 @@ members = [
     "crates/core",
     "crates/store",
     "crates/extract",
+    "crates/feeds",
 ]
 
 [workspace.package]
 version = "0.1.0"
 edition = "2024"
+license = "MIT"
 
 [workspace.dependencies]
 debloatmail-core = { path = "crates/core" }
