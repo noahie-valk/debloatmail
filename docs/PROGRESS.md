@@ -1,8 +1,8 @@
 # Implementation Progress
 
-## Current Status: Phase 2A Complete & Verified
+## Current Status: Phase 2A & 2B Complete; Toolchain & Dependencies Modernized
 
-Phase 1 (`core` + `store`) and **Phase 2A (`crates/extract` + MIME fixtures & determinism)** are complete and verified against `docs/MIME-AND-TEXT.md` and `GEMINI.md`. All 51 unit and integration tests in the workspace pass, `cargo clippy` runs with zero warnings across all targets, and `cargo fmt` is clean.
+Phase 1 (`core` + `store`), **Phase 2A (`crates/extract` + MIME fixtures & determinism)**, and **Phase 2B (`crates/feeds`)** are complete. Workspace dependencies and toolchains were modernized to Rust 1.99.1 (Edition 2024), `mail-parser 1.0.0`, and `rusqlite 0.41.1`. All 51 workspace tests pass, `cargo clippy` runs with zero warnings across all targets, `cargo audit` reports 0 vulnerabilities, and both validation scripts in `scripts/` exit cleanly with code 0.
 
 ---
 
@@ -89,7 +89,16 @@ Phase 1 (`core` + `store`) and **Phase 2A (`crates/extract` + MIME fixtures & de
 - **Clippy lint compliance** – Fixed inner doc comment issue in `limits.rs` to satisfy `clippy::empty_line_after_doc_comments`. *(Docs: [SECURITY.md §8.3](SECURITY.md#83-lint-compliance))*
 - **Low‑level system calls** – Added `libc` dependency to use `open` flags securely in `crates/store`. *(Docs: [SECURITY.md §8.4](SECURITY.md#84-low-level-system-calls))*
 
-### 4. Upcoming Phases
+### 6. Toolchain Modernization & Scripts Verification (Completed)
+
+- **Toolchain Pinned**: Reinstated `rust-toolchain.toml` pinned to Rust `1.99.1`, updated workspace edition to `2024`.
+- **Parser Stack Migration (`mail-parser 1.0.0`)**: Refactored `crates/extract` (`header.rs` and `structure.rs`) to adapt to breaking 1.0.0 API changes (hierarchical `part.children()`, `part.decoded()` transfer decoding, `AddressList` mailbox iterators, and `ContentType` attribute accessors).
+- **SQLite 0.41 Integration**: Updated `crates/store` to `rusqlite = "0.41.1"` (bundled SQLite) and mapped `size_bytes: Option<u64>` to `i64` for `ToSql` compatibility.
+- **Verification Scripts**:
+  - [`scripts/check-invariants.sh`](../scripts/check-invariants.sh): Added `last_activity` to the timestamp field allowlist per `docs/DATA-MODEL.md` §4.1 and fixed the clean-run exit code logic.
+  - [`scripts/run_security_checks.sh`](../scripts/run_security_checks.sh): Fully clean verification across `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace` (51/51 tests passing including all 33 golden MIME fixtures), and `cargo audit` (0 vulnerabilities).
+
+### 7. Upcoming Phases
 
 #### Phase 2C – Engine & Protocol State Machines (`crates/engine`)
 - Sans‑I/O IMAP and SMTP state machines using pimalaya (`io-imap`, `io-smtp`).
