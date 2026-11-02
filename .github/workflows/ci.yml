@@ -1,0 +1,84 @@
+# .github/workflows/ci.yml
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+  CARGO_INCREMENTAL: 0
+
+jobs:
+  # Fast, build-free checks first: they fail in ~15s and give the author
+  # a reason to stop before compiling anything.
+  invariants:
+    name: invariants
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Enforce architecture invariants (GEMINI.md)
+        run: bash scripts/check-invariants.sh
+      - name: Shellcheck the check scripts
+        run: shellcheck scripts/*.sh
+
+  fmt:
+    name: fmt
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pinned toolchain
+        run: |
+          rustup toolchain install --profile minimal
+          rustup component add rustfmt
+          rustup show active-toolchain
+      - name: cargo fmt --check
+        run: cargo fmt --all --check
+
+  test:
+    name: clippy + test
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pinned toolchain
+        run: |
+          rustup toolchain install --profile minimal
+          rustup component add clippy rustfmt
+          rustup show active-toolchain
+          cargo --version
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ci
+      - name: clippy (warnings are errors)
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - name: test
+        run: cargo test --workspace --locked
+
+  supply-chain:
+    name: supply chain
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pinned toolchain
+        run: rustup toolchain install --profile minimal
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-deny,cargo-audit
+      - name: cargo deny (licenses, bans, advisories)
+        run: ./scripts/check-deny.sh
+      - name: cargo audit
+        run: cargo audit
