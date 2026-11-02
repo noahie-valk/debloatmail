@@ -1,13 +1,12 @@
-use feed_rs::model::{Entry, Feed};
+use feed_rs::model::Entry;
 use feed_rs::parser;
-use std::error::Error;
-use std::time::{SystemTime, UNIX_EPOCH};
+use feed_rs::parser::ParseFeedError;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum ParseError {
     #[error("Feed parse error: {0}")]
-    Feed(#[from] feed_rs::parser::Error),
+    Feed(#[from] ParseFeedError),
     #[error("Missing required fields")]
     Missing,
 }
@@ -25,11 +24,9 @@ pub struct ParsedEntry {
 
 /// Parse raw feed bytes into a vector of `ParsedEntry`.
 pub fn parse_feed(bytes: &[u8]) -> Result<Vec<ParsedEntry>, ParseError> {
-    // Use the builder to disable external entities and DTD processing for security.
-    let builder = parser::Builder::new()
-        .disable_external_entities(true)
-        .disable_dtd(true);
-    let feed = builder.parse(bytes)?;
+    // Use the builder to sanitize content for security.
+    let parser = parser::Builder::new().sanitize_content(true).build();
+    let feed = parser.parse(bytes)?;
     let mut entries = Vec::new();
     for entry in feed.entries {
         entries.push(convert_entry(entry));
@@ -45,24 +42,20 @@ fn convert_entry(entry: Entry) -> ParsedEntry {
     // Author name if present.
     let author = entry.authors.first().and_then(|a| a.name.clone());
     // Published time to unix seconds.
-    let published_at = entry.published.map(|dt| datetime_to_unix(dt));
+    let published_at = entry.published.map(|dt| dt.timestamp());
     // Body: use content if present, otherwise summary.
     let body = entry
         .content
         .as_ref()
         .and_then(|c| c.body.clone())
-        .or_else(|| entry.summary.clone())
+        .or_else(|| entry.summary.map(|t| t.content))
         .unwrap_or_default();
     ParsedEntry {
         guid: Some(guid),
         link,
-        title: entry.title.clone(),
+        title: entry.title.map(|t| t.content),
         author,
         published_at,
         body,
     }
-}
-
-fn datetime_to_unix(dt: chrono::DateTime<chrono::FixedOffset>) -> i64 {
-    dt.timestamp()
 }

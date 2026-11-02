@@ -9,6 +9,6 @@ pub mod fetch;
 pub mod parse;
 pub mod poll;
 
-pub use fetch::{fetch_feed, FetchError, FetchResult};
-pub use parse::{parse_feed, ParsedEntry, ParseError};
+pub use fetch::{FetchError, FetchResult, fetch_feed};
+pub use parse::{ParseError, ParsedEntry, parse_feed};
 pub use poll::poll_feed;

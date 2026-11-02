@@ -1,6 +1,6 @@
 // integration test for poll_feed using wiremock
 use debloatmail_feeds::poll::poll_feed;
-use debloatmail_store::{open_in_memory, upsert_feed_item, UpsertFeedItem, StoreError};
+use debloatmail_store::open_in_memory;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -13,7 +13,7 @@ fn test_poll_feed_inserts_items() {
         let rss = include_bytes!("../tests/fixtures/rss_sample.xml");
         let response = ResponseTemplate::new(200)
             .insert_header("Content-Type", "application/rss+xml")
-            .set_body_bytes(rss.clone());
+            .set_body_bytes(*rss);
         Mock::given(method("GET"))
             .and(path("/feed"))
             .respond_with(response)
@@ -35,7 +35,7 @@ fn test_poll_feed_inserts_items() {
         .unwrap();
 
         // run poll_feed (feed_id = 1)
-        poll_feed(&conn, 1).expect("poll_feed should succeed");
+        poll_feed(&conn, 1).await.expect("poll_feed should succeed");
 
         // verify feed_items were inserted (2 items from fixture)
         let mut stmt = conn.prepare("SELECT COUNT(*) FROM feed_items WHERE feed_id = 1").unwrap();

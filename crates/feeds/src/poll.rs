@@ -1,7 +1,7 @@
-use rusqlite::{params, Connection};
-use crate::store::{upsert_feed_item, UpsertFeedItem, StoreError};
-use super::fetch::{fetch_feed, FetchError, FetchResult};
-use super::parse::{parse_feed, ParsedEntry};
+use super::fetch::{FetchError, fetch_feed};
+use super::parse::{ParseError, parse_feed};
+use debloatmail_store::{StoreError, UpsertFeedItem, upsert_feed_item};
+use rusqlite::{Connection, params};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 #[derive(Debug, thiserror::Error)]
@@ -9,7 +9,7 @@ pub enum PollError {
     #[error("Fetch error: {0}")]
     Fetch(#[from] FetchError),
     #[error("Parse error: {0}")]
-    Parse(#[from] super::parse::ParseError),
+    Parse(#[from] ParseError),
     #[error("Database error: {0}")]
     Store(#[from] StoreError),
 }
@@ -22,22 +22,24 @@ pub enum PollError {
 /// 3. If the response is `304 Not Modified`, nothing is changed.
 /// 4. Otherwise parses the feed, deletes any existing items for the feed,
 ///    and upserts each entry via the store layer.
-pub fn poll_feed(conn: &Connection, feed_id: i64) -> Result<(), PollError> {
+pub async fn poll_feed(conn: &Connection, feed_id: i64) -> Result<(), PollError> {
     // Load feed metadata (url, etag, last_modified, account_id).
-    let mut stmt = conn.prepare(
-        "SELECT url, etag, last_modified, account_id FROM feeds WHERE id = ?1",
-    )?;
-    let row = stmt.query_row(params![feed_id], |r| {
-        Ok((
-            r.get::<_, String>(0)?,
-            r.get::<_, Option<String>>(1)?,
-            r.get::<_, Option<String>>(2)?,
-            r.get::<_, i64>(3)?,
-        ))
-    })?;
+    let mut stmt = conn
+        .prepare("SELECT url, etag, last_modified, account_id FROM feeds WHERE id = ?1")
+        .map_err(StoreError::Sqlite)?;
+    let row = stmt
+        .query_row(params![feed_id], |r| {
+            Ok((
+                r.get::<_, String>(0)?,
+                r.get::<_, Option<String>>(1)?,
+                r.get::<_, Option<String>>(2)?,
+                r.get::<_, i64>(3)?,
+            ))
+        })
+        .map_err(StoreError::Sqlite)?;
     let (url, etag_opt, lm_opt, account_id) = row;
 
-    let fetch_res = fetch_feed(&url, etag_opt.as_deref(), lm_opt.as_deref())?;
+    let fetch_res = fetch_feed(&url, etag_opt.as_deref(), lm_opt.as_deref()).await?;
 
     // 304 – nothing changed, just return.
     if fetch_res.status == 304 {
@@ -49,14 +51,23 @@ pub fn poll_feed(conn: &Connection, feed_id: i64) -> Result<(), PollError> {
 
     // Delete existing feed items (both feed_items and the associated items rows).
     // First collect item ids for the feed.
-    let mut del_stmt = conn.prepare("SELECT item_id FROM feed_items WHERE feed_id = ?1")?;
+    let mut del_stmt = conn
+        .prepare("SELECT item_id FROM feed_items WHERE feed_id = ?1")
+        .map_err(StoreError::Sqlite)?;
     let item_ids: Vec<i64> = del_stmt
-        .query_map(params![feed_id], |r| r.get(0))?
-        .collect::<Result<Vec<_>, _>>()?;
+        .query_map(params![feed_id], |r| r.get(0))
+        .map_err(StoreError::Sqlite)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(StoreError::Sqlite)?;
     for id in item_ids {
-        conn.execute("DELETE FROM items WHERE id = ?1", params![id])?;
+        conn.execute("DELETE FROM items WHERE id = ?1", params![id])
+            .map_err(StoreError::Sqlite)?;
     }
-    conn.execute("DELETE FROM feed_items WHERE feed_id = ?1", params![feed_id])?;
+    conn.execute(
+        "DELETE FROM feed_items WHERE feed_id = ?1",
+        params![feed_id],
+    )
+    .map_err(StoreError::Sqlite)?;
 
     // Current timestamp for `now` and `sort_at`.
     let now = SystemTime::now()

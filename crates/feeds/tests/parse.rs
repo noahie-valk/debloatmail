@@ -1,5 +1,5 @@
 // tests for parse module using RSS fixture
-use debloatmail_feeds::parse::{parse_feed, ParsedEntry, ParseError};
+use debloatmail_feeds::parse::parse_feed;
 
 #[test]
 fn test_parse_rss_sample() {
