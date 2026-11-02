@@ -12,13 +12,14 @@ use io_imap::coroutine::{ImapCoroutine, ImapCoroutineState, ImapYield};
 use io_imap::rfc3501::list::ImapMailboxListing;
 use io_imap::rfc4315::expunge_uid::ImapMessageExpungeUid;
 use io_imap::session::{
-    ImapSessionOpen, ImapSessionOpenOptions, ImapSessionOpenYield, ImapSessionSasl,
-    ImapSessionTransport,
+    ImapSessionOpen, ImapSessionOpenOptions, ImapSessionOpenYield, ImapSessionTransport,
 };
+use io_imap::types::core::{IString, NString};
 use io_imap::types::flag::FlagNameAttribute;
 use io_imap::types::mailbox::Mailbox;
 use io_imap::types::response::Capability;
 use io_imap::types::sequence::SequenceSet;
+use io_sasl::Sasl;
 
 use crate::EngineError;
 use crate::io::{AsyncByteStream, EngineStream, MemoryStream, open_imap_stream};
@@ -313,16 +314,17 @@ impl ImapConnection<EngineStream> {
         port: u16,
         security: Security,
         allow_invalid_cert_loopback: bool,
-        sasl: ImapSessionSasl<'static>,
+        sasl: Option<Sasl>,
         auto_id: bool,
     ) -> Result<Self, EngineError> {
         let (transport, starttls) = open_imap_stream(host, port, security)?;
         let for_cleartext = security == Security::None;
 
-        let mut opts = ImapSessionOpenOptions::default()
-            .with_starttls(starttls)
-            .with_auto_id(auto_id);
-        opts.max_message_size = Some(DEFAULT_FRAGMENTIZER_MAX_BYTES);
+        let opts = ImapSessionOpenOptions {
+            starttls,
+            auto_id: build_auto_id_params(auto_id)?,
+            sasl_ir: None,
+        };
 
         let mut coroutine = ImapSessionOpen::new(transport, sasl, opts);
         let mut fragmentizer = Fragmentizer::new(DEFAULT_FRAGMENTIZER_MAX_BYTES);
@@ -336,29 +338,35 @@ impl ImapConnection<EngineStream> {
 
             match state {
                 ImapCoroutineState::Yielded(yielded) => match yielded {
-                    ImapSessionOpenYield::WantsTcpConnect { host, port } => {
+                    ImapSessionOpenYield::WantsTcpConnect {
+                        host: conn_host,
+                        port: conn_port,
+                    } => {
                         stream = Some(
-                            EngineStream::connect_tcp(&host, port, for_cleartext).await?,
+                            EngineStream::connect_tcp(&conn_host, conn_port, for_cleartext)
+                                .await?,
                         );
                     }
-                    ImapSessionOpenYield::WantsTlsConnect { host, port, alpn } => {
-                        let alpn_vecs = alpn.iter().map(|s| s.as_bytes().to_vec()).collect();
+                    ImapSessionOpenYield::WantsTlsConnect {
+                        host: conn_host,
+                        port: conn_port,
+                    } => {
                         stream = Some(
                             EngineStream::connect_tls(
-                                &host,
-                                port,
+                                &conn_host,
+                                conn_port,
                                 allow_invalid_cert_loopback,
-                                alpn_vecs,
+                                vec![b"imap".to_vec()],
                             )
                             .await?,
                         );
                     }
-                    ImapSessionOpenYield::WantsUnixConnect { path } => {
+                    ImapSessionOpenYield::WantsUnixConnect(path) => {
                         return Err(EngineError::InvalidArgument(format!(
-                            "unix domain socket IMAP transport is not supported ({path:?})"
+                            "unix domain socket IMAP transport is not supported ({path})"
                         )));
                     }
-                    ImapSessionOpenYield::WantsTlsUpgrade { host } => {
+                    ImapSessionOpenYield::WantsTlsUpgrade => {
                         let existing = stream.take().ok_or_else(|| {
                             EngineError::Tls(
                                 "IMAP STARTTLS requested before TCP connection was opened"
@@ -367,7 +375,7 @@ impl ImapConnection<EngineStream> {
                         })?;
                         stream = Some(
                             existing
-                                .upgrade_tls(&host, allow_invalid_cert_loopback, vec![])
+                                .upgrade_tls(host, allow_invalid_cert_loopback, vec![])
                                 .await?,
                         );
                     }
@@ -413,22 +421,38 @@ impl ImapConnection<EngineStream> {
     }
 }
 
+fn build_auto_id_params(
+    auto_id: bool,
+) -> Result<Option<Vec<(IString<'static>, NString<'static>)>>, EngineError> {
+    if !auto_id {
+        return Ok(None);
+    }
+    let name_key = IString::try_from("name")
+        .map_err(|e| EngineError::InvalidArgument(e.to_string()))?;
+    let name_val = NString::from(
+        IString::try_from("debloatmail")
+            .map_err(|e| EngineError::InvalidArgument(e.to_string()))?,
+    );
+    Ok(Some(vec![(name_key, name_val)]))
+}
+
 impl ImapConnection<MemoryStream> {
     /// Drives `ImapSessionOpen` over a deterministic in-memory byte stream for zero-socket unit tests.
     pub async fn connect_memory(
         mut stream: MemoryStream,
         starttls: bool,
-        sasl: ImapSessionSasl<'static>,
+        sasl: Option<Sasl>,
         auto_id: bool,
     ) -> Result<Self, EngineError> {
         let transport = ImapSessionTransport::Tcp {
             host: "127.0.0.1".to_string(),
             port: 1143,
         };
-        let mut opts = ImapSessionOpenOptions::default()
-            .with_starttls(starttls)
-            .with_auto_id(auto_id);
-        opts.max_message_size = Some(DEFAULT_FRAGMENTIZER_MAX_BYTES);
+        let opts = ImapSessionOpenOptions {
+            starttls,
+            auto_id: build_auto_id_params(auto_id)?,
+            sasl_ir: None,
+        };
 
         let mut coroutine = ImapSessionOpen::new(transport, sasl, opts);
         let mut fragmentizer = Fragmentizer::new(DEFAULT_FRAGMENTIZER_MAX_BYTES);
@@ -443,8 +467,8 @@ impl ImapConnection<MemoryStream> {
                 ImapCoroutineState::Yielded(yielded) => match yielded {
                     ImapSessionOpenYield::WantsTcpConnect { .. }
                     | ImapSessionOpenYield::WantsTlsConnect { .. }
-                    | ImapSessionOpenYield::WantsUnixConnect { .. } => {}
-                    ImapSessionOpenYield::WantsTlsUpgrade { .. } => {
+                    | ImapSessionOpenYield::WantsUnixConnect(_) => {}
+                    ImapSessionOpenYield::WantsTlsUpgrade => {
                         stream.mark_tls_upgraded();
                     }
                     ImapSessionOpenYield::WantsWrite(bytes) => {

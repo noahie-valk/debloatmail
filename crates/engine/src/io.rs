@@ -201,6 +201,7 @@ pub fn open_smtp_stream(
 pub struct MemoryStream {
     read_chunks: VecDeque<Vec<u8>>,
     written_chunks: Vec<Vec<u8>>,
+    last_written_tag: Option<Vec<u8>>,
     upgraded_to_tls: bool,
 }
 
@@ -213,6 +214,7 @@ impl MemoryStream {
         Self {
             read_chunks: chunks.into_iter().map(Into::into).collect(),
             written_chunks: Vec::new(),
+            last_written_tag: None,
             upgraded_to_tls: false,
         }
     }
@@ -241,13 +243,39 @@ impl MemoryStream {
     }
 }
 
+fn replace_tag_placeholder(chunk: &[u8], tag: Option<&[u8]>) -> Vec<u8> {
+    const PLACEHOLDER: &[u8] = b"<TAG>";
+    let Some(tag_bytes) = tag else {
+        return chunk.to_vec();
+    };
+    if !chunk
+        .windows(PLACEHOLDER.len())
+        .any(|w| w == PLACEHOLDER)
+    {
+        return chunk.to_vec();
+    }
+    let mut out = Vec::with_capacity(chunk.len() + tag_bytes.len());
+    let mut i = 0;
+    while i < chunk.len() {
+        if chunk[i..].starts_with(PLACEHOLDER) {
+            out.extend_from_slice(tag_bytes);
+            i += PLACEHOLDER.len();
+        } else {
+            out.push(chunk[i]);
+            i += 1;
+        }
+    }
+    out
+}
+
 impl AsyncByteStream for MemoryStream {
     async fn read_chunk(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         match self.read_chunks.pop_front() {
-            Some(chunk) => {
-                if chunk.is_empty() {
+            Some(raw_chunk) => {
+                if raw_chunk.is_empty() {
                     return Ok(0);
                 }
+                let chunk = replace_tag_placeholder(&raw_chunk, self.last_written_tag.as_deref());
                 let n = chunk.len().min(buf.len());
                 buf[..n].copy_from_slice(&chunk[..n]);
                 if n < chunk.len() {
@@ -260,6 +288,11 @@ impl AsyncByteStream for MemoryStream {
     }
 
     async fn write_all_bytes(&mut self, bytes: &[u8]) -> io::Result<()> {
+        if let Some(space_pos) = bytes.iter().position(|&b| b == b' ') {
+            if space_pos > 0 && bytes[..space_pos].iter().all(|b| b.is_ascii_graphic()) {
+                self.last_written_tag = Some(bytes[..space_pos].to_vec());
+            }
+        }
         self.written_chunks.push(bytes.to_vec());
         Ok(())
     }
