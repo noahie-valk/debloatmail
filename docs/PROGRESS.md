@@ -1,8 +1,8 @@
 # Implementation Progress
 
-## Current Status: Phase 2A & 2B Complete; Toolchain & Dependencies Modernized
+## Current Status: Phase 2A, 2B, & 2C Complete; Toolchain & Dependencies Modernized
 
-Phase 1 (`core` + `store`), **Phase 2A (`crates/extract` + MIME fixtures & determinism)**, and **Phase 2B (`crates/feeds`)** are complete. Workspace dependencies and toolchains were modernized to Rust 1.99.1 (Edition 2024), `mail-parser 1.0.0`, and `rusqlite 0.41.1`. All 51 workspace tests pass, `cargo clippy` runs with zero warnings across all targets, `cargo audit` reports 0 vulnerabilities, and both validation scripts in `scripts/` exit cleanly with code 0.
+Phase 1 (`core` + `store`), **Phase 2A (`crates/extract` + MIME fixtures & determinism)**, **Phase 2B (`crates/feeds`)**, and **Phase 2C (`crates/auth` + `crates/engine`)** are complete. Workspace dependencies and toolchains were modernized to Rust 1.99.1 (Edition 2024), `mail-parser 1.0.0`, and `rusqlite 0.41.1`. All 85 workspace tests pass, `cargo clippy` runs with zero warnings across all targets, `cargo deny` passes advisories/bans/licenses/sources, and `scripts/check-invariants.sh` exits cleanly with code 0.
 
 ---
 
@@ -64,9 +64,12 @@ Phase 1 (`core` + `store`), **Phase 2A (`crates/extract` + MIME fixtures & deter
 
 ### 2. Workspace Verification
 
-- **Tests**: `cargo test --workspace --all-targets` passes all 51 tests:
+- **Tests**: `cargo test --workspace --all-targets` passes all 85 tests:
+  - `debloatmail-auth`: 6 unit tests
   - `debloatmail-core`: 9 unit tests
+  - `debloatmail-engine`: 23 unit tests
   - `debloatmail-extract`: 33 unit tests + 3 integration tests (`determinism`)
+  - `debloatmail-feeds`: 5 integration tests
   - `debloatmail-store`: 6 unit tests
 - **Clippy**: `cargo clippy --workspace --all-targets -- -D warnings` passes cleanly (0 warnings).
 - **Formatting**: `cargo fmt --all -- --check` passes cleanly.
@@ -81,6 +84,20 @@ Phase 1 (`core` + `store`), **Phase 2A (`crates/extract` + MIME fixtures & deter
 - Provided `fetch_feed`, `parse_feed`, and `poll_feed` public API (re‑exported in `crates/feeds/src/lib.rs`).
 - Added comprehensive unit and integration tests with a sample RSS fixture (`crates/feeds/tests/fixtures/rss_sample.xml`).
 - All workspace tests pass (`cargo test`), clippy reports 0 warnings, and formatting checks succeed.
+
+### 4. Completed Phase 2C (`crates/auth` & `crates/engine`)
+
+- **`crates/auth` (`debloatmail-auth`)**:
+  - Implemented `SecretStore` trait with `KeyringStore` (`keyring` v4 with `zbus-secret-service-keyring-store`) and `MemorySecretStore` for headless/unit tests (`store.rs`).
+  - Implemented SASL credential builders (`build_sasl_credentials`) and mechanism negotiation (`select_password_mechanism` preferring `SCRAM-SHA-256` → `PLAIN` → `LOGIN`) using `io-sasl = "=0.1.0"` and `secrecy::SecretString` (`sasl.rs`).
+  - Implemented provider presets (`Fastmail`, `Proton`, `Generic`) and `validate_account_security` refusing cleartext (`Security::None`) on non-loopback hosts (`preset.rs`).
+- **`crates/engine` (`debloatmail-engine`)**:
+  - Confined all IMAP/SMTP TLS handshakes to `crates/engine/src/tls.rs` (`rustls` + `ring` + `rustls-platform-verifier`), enforcing `allow_invalid_cert_loopback` strictly against the connected socket's `peer_addr().ip().is_loopback()` (`127.0.0.1` or `::1`) and surfacing `TlsVerifyMode::LoopbackExceptionUsed`.
+  - Confined all IMAP/SMTP TCP sockets to `crates/engine/src/io.rs` (`EngineStream` + `MemoryStream` for zero-socket coroutine tests).
+  - Implemented sans-I/O `io-imap = "=0.7.1"` coroutine pumps in `crates/engine/src/imap/` (`ImapConnection`, `discover_folders` with RFC 6154 `SPECIAL-USE` + localized name fallback + role uniqueness + Gmail `\All` handling, `fetch_header_window`, `fetch_body_peek`, `fetch_attachment_section` with RFC 3501 `section_id` validation, `uid_expunge_messages` requiring `UIDPLUS`, and `run_idle_once` with a 28-minute cap).
+  - Implemented sans-I/O `io-smtp = "=0.6.0"` coroutine pumps in `crates/engine/src/smtp/` (`SmtpConnection`, `build_rfc5322_message` with CRLF header injection guard and `Bcc` stripping, and `send_email` distinguishing `Sent`, `Rejected`, `ConnectionFailed`, and mid-`DATA` `NoVerdict`).
+  - Implemented `AccountStateMachine`, `FailureClass`, and exponential backoff + jitter schedules (`account_reconnect_backoff`, `feed_poll_backoff`, `op_retry_backoff`, `deterministic_account_jitter`) in `crates/engine/src/state.rs`.
+  - Implemented `run_account_check` in `crates/engine/src/check.rs` for `debloatmailctl account check` and `debloatmailctl doctor`.
 
 ### 5. Security Hardening (Completed)
 
@@ -109,13 +126,9 @@ Phase 1 (`core` + `store`), **Phase 2A (`crates/extract` + MIME fixtures & deter
 
 ### 8. Upcoming Phases
 
-#### Phase 2C – Engine & Protocol State Machines (`crates/engine`)
-- Sans‑I/O IMAP and SMTP state machines using pimalaya (`io-imap`, `io-smtp`).
-- Network and TLS confined to `engine/io.rs` and `engine/tls.rs`.
-- Credential handling via `crates/auth` (`keyring` / `oo7`).
-
-#### Phase 3 – CLI Validation Spike (`crates/cli` / `debloatmailctl`)
-- Build the CLI as the first consumer of the engine.
+#### Phase 2D / Phase 3 – Sync Orchestration & CLI Validation Spike (`crates/sync` & `crates/cli`)
+- Coordinate `crates/engine`, `crates/store`, `crates/extract`, and `crates/feeds` in `crates/sync`.
+- Build `crates/cli` (`debloatmailctl`) as the first consumer of the engine.
 - Demonstrate full end‑to‑end flow: authentication, sync, send queue, feed ingest, MIME extraction, and FTS5 search.
 - Ensure the CLI works before any QML UI is introduced.
 
