@@ -9,7 +9,7 @@ use std::sync::Arc;
 use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
 use rustls::{ClientConfig, DigitallySignedStruct, Error as RustlsError, SignatureScheme};
 use rustls_pki_types::{CertificateDer, ServerName, UnixTime};
-use rustls_platform_verifier::ConfigVerifierExt;
+use rustls_platform_verifier::BuilderVerifierExt;
 use tokio_rustls::TlsConnector;
 
 use crate::EngineError;
@@ -161,29 +161,36 @@ mod tests {
     #[test]
     fn test_loopback_cert_exception_enforces_connected_peer_ip() {
         // IPv4 loopback (127.0.0.1) succeeds and reports LoopbackExceptionUsed
-        let (_, mode_v4) =
-            build_tls_connector(IpAddr::V4(Ipv4Addr::LOCALHOST), true, vec![b"imap".to_vec()])
-                .unwrap();
+        let (_, mode_v4) = build_tls_connector(
+            IpAddr::V4(Ipv4Addr::LOCALHOST),
+            true,
+            vec![b"imap".to_vec()],
+        )
+        .unwrap();
         assert_eq!(mode_v4, TlsVerifyMode::LoopbackExceptionUsed);
 
         // IPv6 loopback (::1) succeeds and reports LoopbackExceptionUsed
-        let (_, mode_v6) =
-            build_tls_connector(IpAddr::V6(Ipv6Addr::LOCALHOST), true, vec![b"imap".to_vec()])
-                .unwrap();
+        let (_, mode_v6) = build_tls_connector(
+            IpAddr::V6(Ipv6Addr::LOCALHOST),
+            true,
+            vec![b"imap".to_vec()],
+        )
+        .unwrap();
         assert_eq!(mode_v6, TlsVerifyMode::LoopbackExceptionUsed);
 
         // Non-loopback IP (even private LAN 192.168.1.10 or public IP) with allow_invalid_cert_loopback = true
         // MUST be refused!
         let lan_ip = IpAddr::V4(Ipv4Addr::new(192, 168, 1, 10));
-        let err = build_tls_connector(lan_ip, true, vec![]).unwrap_err();
+        let Err(err) = build_tls_connector(lan_ip, true, vec![]) else {
+            panic!("expected LoopbackCertExceptionRefused error");
+        };
         assert!(matches!(
             err,
             EngineError::LoopbackCertExceptionRefused(ip) if ip == lan_ip
         ));
 
         // Standard strict platform verifier works on any IP
-        let (_, strict_mode) =
-            build_tls_connector(lan_ip, false, vec![b"imap".to_vec()]).unwrap();
+        let (_, strict_mode) = build_tls_connector(lan_ip, false, vec![b"imap".to_vec()]).unwrap();
         assert_eq!(strict_mode, TlsVerifyMode::StrictPlatform);
     }
 }

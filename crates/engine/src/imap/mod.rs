@@ -29,7 +29,7 @@ mod tests {
     use io_imap::types::flag::FlagNameAttribute;
     use io_imap::types::mailbox::Mailbox;
     use io_imap::types::sequence::{SeqOrUid, Sequence, SequenceSet};
-    use io_sasl::{Sasl, SaslPlainCreds};
+    use io_sasl::{mechanism::Sasl, rfc4616::plain::SaslPlainCreds};
 
     use super::*;
     use crate::EngineError;
@@ -90,10 +90,8 @@ mod tests {
             b"STS\r\n<TAG> OK second noop done\r\n".to_vec(),
         ]);
 
-        let mut conn = ImapConnection::from_authenticated_memory(
-            mem,
-            NegotiatedCapabilities::default(),
-        );
+        let mut conn =
+            ImapConnection::from_authenticated_memory(mem, NegotiatedCapabilities::default());
 
         conn.run(ImapNoop::new()).await.unwrap();
         conn.run(ImapNoop::new()).await.unwrap();
@@ -200,10 +198,8 @@ mod tests {
                 .to_vec(),
         ]);
 
-        let mut conn = ImapConnection::from_authenticated_memory(
-            mem,
-            NegotiatedCapabilities::default(),
-        );
+        let mut conn =
+            ImapConnection::from_authenticated_memory(mem, NegotiatedCapabilities::default());
         let uid = NonZeroU32::new(42).unwrap();
 
         let body = fetch_body_peek(&mut conn, uid).await.unwrap();
@@ -242,7 +238,8 @@ mod tests {
         assert!(conn_no_uidplus.stream.all_written_bytes().is_empty());
 
         // With UIDPLUS capability: issues `UID EXPUNGE 99`
-        let mem = MemoryStream::new([b"* 1 EXPUNGE\r\n<TAG> OK UID EXPUNGE completed\r\n".to_vec()]);
+        let mem =
+            MemoryStream::new([b"* 1 EXPUNGE\r\n<TAG> OK UID EXPUNGE completed\r\n".to_vec()]);
         let mut conn_with_uidplus = ImapConnection::from_authenticated_memory(
             mem,
             NegotiatedCapabilities {

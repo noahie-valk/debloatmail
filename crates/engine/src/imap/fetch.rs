@@ -87,9 +87,8 @@ pub async fn fetch_header_window<S: AsyncByteStream>(
     uid_start: u32,
     uid_end: Option<u32>,
 ) -> Result<BTreeMap<NonZeroU32, Vec1<MessageDataItem<'static>>>, EngineError> {
-    let start_nz = NonZeroU32::new(uid_start).ok_or_else(|| {
-        EngineError::InvalidArgument("uid_start must be >= 1".to_string())
-    })?;
+    let start_nz = NonZeroU32::new(uid_start)
+        .ok_or_else(|| EngineError::InvalidArgument("uid_start must be >= 1".to_string()))?;
 
     let capped_end_val = match uid_end {
         Some(end) => {
@@ -103,9 +102,8 @@ pub async fn fetch_header_window<S: AsyncByteStream>(
         None => uid_start.saturating_add(HEADER_FETCH_WINDOW_SIZE - 1),
     };
 
-    let end_nz = NonZeroU32::new(capped_end_val).ok_or_else(|| {
-        EngineError::InvalidArgument("computed uid_end must be >= 1".to_string())
-    })?;
+    let end_nz = NonZeroU32::new(capped_end_val)
+        .ok_or_else(|| EngineError::InvalidArgument("computed uid_end must be >= 1".to_string()))?;
 
     let seq = if start_nz == end_nz {
         Sequence::Single(SeqOrUid::Value(start_nz))
@@ -143,7 +141,9 @@ pub async fn fetch_body_peek<S: AsyncByteStream>(
         uid: true,
         modifiers: Vec::new(),
     };
-    let fetched = conn.run(ImapMessageFetchFirst::new(uid, items, opts)).await?;
+    let fetched = conn
+        .run(ImapMessageFetchFirst::new(uid, items, opts))
+        .await?;
     extract_body_bytes(fetched.as_ref(), None)
 }
 
@@ -171,7 +171,9 @@ pub async fn fetch_attachment_section<S: AsyncByteStream>(
         uid: true,
         modifiers: Vec::new(),
     };
-    let fetched = conn.run(ImapMessageFetchFirst::new(uid, items, opts)).await?;
+    let fetched = conn
+        .run(ImapMessageFetchFirst::new(uid, items, opts))
+        .await?;
     extract_body_bytes(fetched.as_ref(), Some(&expected_section))
 }
 

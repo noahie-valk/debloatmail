@@ -155,10 +155,7 @@ impl SecretStore for MemorySecretStore {
             .entries
             .write()
             .map_err(|_| AuthError::KeyringFailure("lock poisoned".to_string()))?;
-        map.insert(
-            secret_ref.to_string(),
-            secret.expose_secret().to_string(),
-        );
+        map.insert(secret_ref.to_string(), secret.expose_secret().to_string());
         Ok(())
     }
 

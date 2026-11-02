@@ -19,14 +19,14 @@ use io_imap::types::flag::FlagNameAttribute;
 use io_imap::types::mailbox::Mailbox;
 use io_imap::types::response::Capability;
 use io_imap::types::sequence::SequenceSet;
-use io_sasl::Sasl;
+use io_sasl::mechanism::Sasl;
 
 use crate::EngineError;
 use crate::io::{AsyncByteStream, EngineStream, MemoryStream, open_imap_stream};
 use crate::tls::TlsVerifyMode;
 
 /// Default maximum message size for the connection-wide `Fragmentizer` (50 MiB).
-pub const DEFAULT_FRAGMENTIZER_MAX_BYTES: usize = 50 * 1024 * 1024;
+pub const DEFAULT_FRAGMENTIZER_MAX_BYTES: u32 = 50 * 1024 * 1024;
 
 /// Capabilities negotiated on an authenticated IMAP connection (`SYNC.md` §5.2).
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -56,17 +56,16 @@ pub fn extract_capabilities(caps: &[Capability<'_>]) -> NegotiatedCapabilities {
             Capability::CondStore => out.condstore = true,
             Capability::QResync => out.qresync = true,
             Capability::Auth(mech) => {
-                out.sasl_mechanisms.push(mech.to_string().to_ascii_uppercase());
+                out.sasl_mechanisms
+                    .push(mech.to_string().to_ascii_uppercase());
             }
-            _ => {
-                match upper.as_str() {
-                    "SPECIAL-USE" => out.special_use = true,
-                    "UTF8=ACCEPT" | "UTF8=ONLY" => out.utf8_accept = true,
-                    "CONDSTORE" => out.condstore = true,
-                    "QRESYNC" => out.qresync = true,
-                    _ => {}
-                }
-            }
+            _ => match upper.as_str() {
+                "SPECIAL-USE" => out.special_use = true,
+                "UTF8=ACCEPT" | "UTF8=ONLY" => out.utf8_accept = true,
+                "CONDSTORE" => out.condstore = true,
+                "QRESYNC" => out.qresync = true,
+                _ => {}
+            },
         }
     }
     out
@@ -100,19 +99,16 @@ fn mailbox_to_string(mailbox: &Mailbox<'_>) -> String {
 }
 
 fn leaf_display_name(name: &str, delimiter: Option<char>) -> String {
-    if let Some(delim) = delimiter {
-        if let Some((_, leaf)) = name.rsplit_once(delim) {
-            if !leaf.is_empty() {
-                return leaf.to_string();
-            }
-        }
+    if let Some(delim) = delimiter
+        && let Some((_, leaf)) = name.rsplit_once(delim)
+        && !leaf.is_empty()
+    {
+        return leaf.to_string();
     }
     name.to_string()
 }
 
-fn match_special_use_attrs(
-    attrs: &[FlagNameAttribute<'_>],
-) -> (Option<FolderRole>, bool, bool) {
+fn match_special_use_attrs(attrs: &[FlagNameAttribute<'_>]) -> (Option<FolderRole>, bool, bool) {
     let mut role = None;
     let mut is_noselect = false;
     let mut is_all_mail = false;
@@ -253,10 +249,10 @@ pub fn discover_folders(listing: ImapMailboxListing) -> Vec<DiscoveredFolder> {
                 };
                 assigned[idx] = Some((FolderRole::Inbox, src));
             }
-        } else if let Some(role) = entry.special_role {
-            if claimed_roles.insert(role) {
-                assigned[idx] = Some((role, RoleSource::SpecialUse));
-            }
+        } else if let Some(role) = entry.special_role
+            && claimed_roles.insert(role)
+        {
+            assigned[idx] = Some((role, RoleSource::SpecialUse));
         }
     }
 
@@ -265,10 +261,10 @@ pub fn discover_folders(listing: ImapMailboxListing) -> Vec<DiscoveredFolder> {
         if !entry.selectable || assigned[idx].is_some() {
             continue;
         }
-        if let Some(role) = match_fallback_role_by_name(&entry.name, &entry.display_name) {
-            if claimed_roles.insert(role) {
-                assigned[idx] = Some((role, RoleSource::Name));
-            }
+        if let Some(role) = match_fallback_role_by_name(&entry.name, &entry.display_name)
+            && claimed_roles.insert(role)
+        {
+            assigned[idx] = Some((role, RoleSource::Name));
         }
     }
 
@@ -343,8 +339,7 @@ impl ImapConnection<EngineStream> {
                         port: conn_port,
                     } => {
                         stream = Some(
-                            EngineStream::connect_tcp(&conn_host, conn_port, for_cleartext)
-                                .await?,
+                            EngineStream::connect_tcp(&conn_host, conn_port, for_cleartext).await?,
                         );
                     }
                     ImapSessionOpenYield::WantsTlsConnect {
@@ -427,12 +422,12 @@ fn build_auto_id_params(
     if !auto_id {
         return Ok(None);
     }
-    let name_key = IString::try_from("name")
-        .map_err(|e| EngineError::InvalidArgument(e.to_string()))?;
-    let name_val = NString::from(
+    let name_key =
+        IString::try_from("name").map_err(|e| EngineError::InvalidArgument(e.to_string()))?;
+    let name_val = NString(Some(
         IString::try_from("debloatmail")
             .map_err(|e| EngineError::InvalidArgument(e.to_string()))?,
-    );
+    ));
     Ok(Some(vec![(name_key, name_val)]))
 }
 

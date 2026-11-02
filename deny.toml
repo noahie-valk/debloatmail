@@ -61,4 +61,10 @@ deny = [
 [advisories]
 # Deny crates with known security vulnerabilities in the RustSec advisory DB.
 version = 2
-ignore = []
+ignore = [
+    # Informational "merged into zbus 6.0" notices for zbus 5.19 sub-crates pulled
+    # transitively by keyring 4.2 -> zbus-secret-service-keyring-store 1.0.
+    "RUSTSEC-2026-0370",
+    "RUSTSEC-2026-0371",
+    "RUSTSEC-2026-0372",
+]

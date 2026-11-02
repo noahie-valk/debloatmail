@@ -71,8 +71,7 @@ pub fn classify_imap_error(err: &EngineError) -> FailureClass {
             | ImapSessionOpenError::AuthPlain(_)
             | ImapSessionOpenError::AuthOauthbearer(_)
             | ImapSessionOpenError::AuthXoauth2(_)
-            | ImapSessionOpenError::AuthScramSha256(_)
-            | ImapSessionOpenError::LoginDisabled => FailureClass::AuthFailure,
+            | ImapSessionOpenError::AuthScramSha256(_) => FailureClass::AuthFailure,
             ImapSessionOpenError::StartTlsInjection => FailureClass::ProtocolViolation,
             ImapSessionOpenError::Greeting(_) | ImapSessionOpenError::Capability(_) => {
                 FailureClass::TransientServer
@@ -337,9 +336,7 @@ impl AccountStateMachine {
 
         let delay = account_reconnect_backoff(self.consecutive_failures, rng);
         self.consecutive_failures = self.consecutive_failures.saturating_add(1);
-        let next_retry_at = clock
-            .now_secs()
-            .saturating_add(delay.as_secs() as i64);
+        let next_retry_at = clock.now_secs().saturating_add(delay.as_secs() as i64);
 
         self.state = AccountState::Backoff {
             next_retry_at,
@@ -448,7 +445,7 @@ mod tests {
 
     #[test]
     fn test_deterministic_account_jitter_within_ten_percent() {
-        let id = AccountId::new("01J8X6Z4M9R3W2Q7V5N8K1P0T2");
+        let id = AccountId::new("018f6e80-7c00-7218-971e-7f62b2512f71").unwrap();
         let jitter = deterministic_account_jitter(&id, 300);
         assert!((-30..=30).contains(&jitter));
         // Deterministic across calls

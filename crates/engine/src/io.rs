@@ -248,10 +248,7 @@ fn replace_tag_placeholder(chunk: &[u8], tag: Option<&[u8]>) -> Vec<u8> {
     let Some(tag_bytes) = tag else {
         return chunk.to_vec();
     };
-    if !chunk
-        .windows(PLACEHOLDER.len())
-        .any(|w| w == PLACEHOLDER)
-    {
+    if !chunk.windows(PLACEHOLDER.len()).any(|w| w == PLACEHOLDER) {
         return chunk.to_vec();
     }
     let mut out = Vec::with_capacity(chunk.len() + tag_bytes.len());
@@ -288,10 +285,11 @@ impl AsyncByteStream for MemoryStream {
     }
 
     async fn write_all_bytes(&mut self, bytes: &[u8]) -> io::Result<()> {
-        if let Some(space_pos) = bytes.iter().position(|&b| b == b' ') {
-            if space_pos > 0 && bytes[..space_pos].iter().all(|b| b.is_ascii_graphic()) {
-                self.last_written_tag = Some(bytes[..space_pos].to_vec());
-            }
+        if let Some(space_pos) = bytes.iter().position(|&b| b == b' ')
+            && space_pos > 0
+            && bytes[..space_pos].iter().all(|b| b.is_ascii_graphic())
+        {
+            self.last_written_tag = Some(bytes[..space_pos].to_vec());
         }
         self.written_chunks.push(bytes.to_vec());
         Ok(())

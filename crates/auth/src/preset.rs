@@ -135,7 +135,9 @@ pub fn validate_account_security(account: &Account) -> Result<(), AuthError> {
         .as_deref()
         .map(str::trim)
         .filter(|h| !h.is_empty())
-        .ok_or_else(|| AuthError::InvalidConfig("imap_host is required for IMAP accounts".into()))?;
+        .ok_or_else(|| {
+            AuthError::InvalidConfig("imap_host is required for IMAP accounts".into())
+        })?;
     let imap_sec = account.imap_security.unwrap_or(Security::Tls);
     if imap_sec == Security::None && !is_loopback_host(imap_host) {
         return Err(AuthError::InvalidConfig(format!(
@@ -148,7 +150,9 @@ pub fn validate_account_security(account: &Account) -> Result<(), AuthError> {
         .as_deref()
         .map(str::trim)
         .filter(|h| !h.is_empty())
-        .ok_or_else(|| AuthError::InvalidConfig("smtp_host is required for IMAP accounts".into()))?;
+        .ok_or_else(|| {
+            AuthError::InvalidConfig("smtp_host is required for IMAP accounts".into())
+        })?;
     let smtp_sec = account.smtp_security.unwrap_or(Security::Tls);
     if smtp_sec == Security::None && !is_loopback_host(smtp_host) {
         return Err(AuthError::InvalidConfig(format!(

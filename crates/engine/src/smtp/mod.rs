@@ -6,7 +6,7 @@ pub mod compose;
 use std::borrow::Cow;
 
 use debloatmail_core::Security;
-use io_sasl::Sasl;
+use io_sasl::mechanism::Sasl;
 use io_smtp::client::{SmtpClientAsync, SmtpClientError};
 use io_smtp::coroutine::{SmtpCoroutine, SmtpCoroutineState, SmtpYield};
 use io_smtp::message::{SmtpMessageSend, SmtpMessageSendError, SmtpMessageSendOptions};
@@ -80,8 +80,7 @@ impl SmtpConnection<EngineStream> {
                         port: conn_port,
                     } => {
                         stream = Some(
-                            EngineStream::connect_tcp(&conn_host, conn_port, for_cleartext)
-                                .await?,
+                            EngineStream::connect_tcp(&conn_host, conn_port, for_cleartext).await?,
                         );
                     }
                     SmtpSessionOpenYield::WantsTlsConnect {
@@ -386,8 +385,7 @@ fn classify_send_error(err: SmtpMessageSendError, data_body_sent: bool) -> SendO
 
 #[cfg(test)]
 mod tests {
-    use io_sasl::{Sasl, SaslPlainCreds};
-    use io_smtp::rfc3207::starttls::SmtpStartTlsError;
+    use io_sasl::{mechanism::Sasl, rfc4616::plain::SaslPlainCreds};
     use io_smtp::session::SmtpSessionOpenError;
 
     use super::*;
@@ -444,9 +442,9 @@ mod tests {
         let res = SmtpConnection::connect_memory(mem, true, None).await;
         assert!(matches!(
             res,
-            Err(EngineError::SmtpSession(SmtpSessionOpenError::StartTls(
-                SmtpStartTlsError::StartTlsInjection
-            )))
+            Err(EngineError::SmtpSession(
+                SmtpSessionOpenError::StartTlsInjection
+            ))
         ));
     }
 

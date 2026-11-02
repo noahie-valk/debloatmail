@@ -4,14 +4,14 @@
 use std::time::Instant;
 
 use debloatmail_auth::{
-    PasswordAuthPreference, SecretStore, build_sasl_credentials, select_password_mechanism,
+    SecretStore, build_sasl_credentials, format_secret_ref, select_password_mechanism,
     validate_account_security,
 };
-use debloatmail_core::{Account, Provider};
+use debloatmail_core::{Account, Security};
 use io_imap::client::ImapClientAsync;
 use io_imap::rfc3501::list::ImapMailboxList;
 use io_imap::rfc3501::logout::ImapLogout;
-use io_imap::rfc3501::select::ImapMailboxSelect;
+use io_imap::rfc3501::select::{ImapMailboxSelect, ImapMailboxSelectOptions};
 use io_imap::types::mailbox::{ListMailbox, Mailbox};
 use io_smtp::client::SmtpClientAsync;
 use io_smtp::rfc5321::quit::SmtpQuit;
@@ -90,6 +90,17 @@ pub async fn run_account_check(
         return report;
     }
 
+    let imap_host = account.imap_host.as_deref().unwrap_or_default();
+    let imap_port = account.imap_port.unwrap_or(993);
+    let imap_security = account.imap_security.unwrap_or(Security::Tls);
+    let smtp_host = account.smtp_host.as_deref().unwrap_or_default();
+    let smtp_port = account.smtp_port.unwrap_or(465);
+    let smtp_security = account.smtp_security.unwrap_or(Security::Tls);
+    let secret_ref_label = account
+        .secret_ref
+        .clone()
+        .unwrap_or_else(|| format_secret_ref(&account.id));
+
     // Step 2: Keyring secret lookup
     let t_keyring = Instant::now();
     let password = match secret_store.get_secret(&account.id) {
@@ -98,7 +109,7 @@ pub async fn run_account_check(
                 step: "keyring",
                 passed: true,
                 duration_ms: t_keyring.elapsed().as_millis() as u64,
-                detail: format!("loaded secret for {}", account.secret_ref),
+                detail: format!("loaded secret for {secret_ref_label}"),
                 is_auth_or_network_failure: false,
             });
             secret
@@ -115,8 +126,8 @@ pub async fn run_account_check(
         }
     };
 
-    let mech = select_password_mechanism(&[], PasswordAuthPreference::Auto);
-    let imap_sasl = match build_sasl_credentials(&account.username, &password, mech, None) {
+    let mech = select_password_mechanism(&[], None);
+    let imap_sasl = match build_sasl_credentials(account, &password, mech.clone()) {
         Ok(creds) => creds,
         Err(err) => {
             report.steps.push(CheckStepReport {
@@ -129,7 +140,7 @@ pub async fn run_account_check(
             return report;
         }
     };
-    let smtp_sasl = match build_sasl_credentials(&account.username, &password, mech, None) {
+    let smtp_sasl = match build_sasl_credentials(account, &password, mech) {
         Ok(creds) => creds,
         Err(err) => {
             report.steps.push(CheckStepReport {
@@ -143,14 +154,17 @@ pub async fn run_account_check(
         }
     };
 
-    let auto_id = account.provider == Provider::Fastmail;
+    let auto_id = account
+        .provider
+        .as_deref()
+        .is_some_and(|p| p.eq_ignore_ascii_case("fastmail"));
 
     // Step 3: IMAP connect + TLS + authenticate + LIST + SELECT INBOX + LOGOUT
     let t_imap = Instant::now();
     match ImapConnection::connect(
-        &account.imap_host,
-        account.imap_port,
-        account.imap_security,
+        imap_host,
+        imap_port,
+        imap_security,
         account.allow_invalid_cert_loopback,
         Some(imap_sasl),
         auto_id,
@@ -167,8 +181,8 @@ pub async fn run_account_check(
                 passed: true,
                 duration_ms: t_imap.elapsed().as_millis() as u64,
                 detail: format!(
-                    "connected and authenticated to {}:{} ({:?})",
-                    account.imap_host, account.imap_port, imap_conn.verify_mode
+                    "connected and authenticated to {imap_host}:{imap_port} ({:?})",
+                    imap_conn.verify_mode
                 ),
                 is_auth_or_network_failure: false,
             });
@@ -189,7 +203,10 @@ pub async fn run_account_check(
                     report.discovered_folders = folders;
 
                     match imap_conn
-                        .run(ImapMailboxSelect::new(Mailbox::Inbox, None))
+                        .run(ImapMailboxSelect::new(
+                            Mailbox::Inbox,
+                            ImapMailboxSelectOptions::default(),
+                        ))
                         .await
                     {
                         Ok(_) => {
@@ -197,9 +214,7 @@ pub async fn run_account_check(
                                 step: "imap_mailbox",
                                 passed: true,
                                 duration_ms: t_list.elapsed().as_millis() as u64,
-                                detail: format!(
-                                    "discovered {count} folder(s) and selected INBOX"
-                                ),
+                                detail: format!("discovered {count} folder(s) and selected INBOX"),
                                 is_auth_or_network_failure: false,
                             });
                         }
@@ -241,9 +256,9 @@ pub async fn run_account_check(
     // Step 4: SMTP connect + TLS + EHLO + authenticate + QUIT
     let t_smtp = Instant::now();
     match SmtpConnection::connect(
-        &account.smtp_host,
-        account.smtp_port,
-        account.smtp_security,
+        smtp_host,
+        smtp_port,
+        smtp_security,
         account.allow_invalid_cert_loopback,
         Some(smtp_sasl),
     )
@@ -258,8 +273,8 @@ pub async fn run_account_check(
                 passed: true,
                 duration_ms: t_smtp.elapsed().as_millis() as u64,
                 detail: format!(
-                    "connected and authenticated to {}:{} ({:?})",
-                    account.smtp_host, account.smtp_port, smtp_conn.verify_mode
+                    "connected and authenticated to {smtp_host}:{smtp_port} ({:?})",
+                    smtp_conn.verify_mode
                 ),
                 is_auth_or_network_failure: false,
             });
@@ -281,21 +296,41 @@ pub async fn run_account_check(
 
 #[cfg(test)]
 mod tests {
-    use debloatmail_auth::{MemorySecretStore, apply_preset};
-    use debloatmail_core::{AccountId, Provider};
+    use debloatmail_auth::{MemorySecretStore, ProviderPreset, apply_preset};
+    use debloatmail_core::{AccountId, AccountKind, AuthKind};
 
     use super::*;
+
+    fn sample_fastmail_account() -> Account {
+        let mut acct = Account {
+            id: AccountId::new("018f6e80-7c00-7218-971e-7f62b2512f71").unwrap(),
+            kind: AccountKind::Imap,
+            name: "Fastmail".to_string(),
+            email: Some("alice@fastmail.com".to_string()),
+            provider: None,
+            enabled: true,
+            imap_host: None,
+            imap_port: None,
+            imap_security: None,
+            smtp_host: None,
+            smtp_port: None,
+            smtp_security: None,
+            auth_kind: AuthKind::Password,
+            username: Some("alice@fastmail.com".to_string()),
+            secret_ref: None,
+            allow_invalid_cert_loopback: false,
+            poll_interval_secs: None,
+            created_at: 1000,
+            updated_at: 1000,
+        };
+        apply_preset(&mut acct, ProviderPreset::Fastmail);
+        acct
+    }
 
     #[tokio::test]
     async fn test_run_account_check_reports_missing_keyring_secret() {
         let store = MemorySecretStore::new();
-        let account = apply_preset(
-            AccountId::new("01J8X6Z4M9R3W2Q7V5N8K1P0T2"),
-            "Fastmail",
-            "alice@fastmail.com",
-            Provider::Fastmail,
-            None,
-        );
+        let account = sample_fastmail_account();
 
         let report = run_account_check(&account, &store).await;
         assert!(!report.all_passed());
@@ -308,14 +343,8 @@ mod tests {
     #[tokio::test]
     async fn test_run_account_check_rejects_invalid_security_policy() {
         let store = MemorySecretStore::new();
-        let mut account = apply_preset(
-            AccountId::new("01J8X6Z4M9R3W2Q7V5N8K1P0T2"),
-            "Bad",
-            "alice@fastmail.com",
-            Provider::Fastmail,
-            None,
-        );
-        account.allow_invalid_cert_loopback = true; // Invalid for non-loopback Fastmail host
+        let mut account = sample_fastmail_account();
+        account.imap_security = Some(Security::None); // Cleartext refused on non-loopback Fastmail host
 
         let report = run_account_check(&account, &store).await;
         assert!(!report.all_passed());

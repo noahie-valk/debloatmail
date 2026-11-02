@@ -138,7 +138,11 @@ mod tests {
 
     #[test]
     fn test_select_password_mechanism_precedence() {
-        let adv = [SaslMechanism::Login, SaslMechanism::Plain, SaslMechanism::ScramSha256];
+        let adv = [
+            SaslMechanism::Login,
+            SaslMechanism::Plain,
+            SaslMechanism::ScramSha256,
+        ];
         let pref = select_password_mechanism(&adv, Some(b"nonce12345".to_vec()));
         assert_eq!(
             pref,
@@ -162,8 +166,7 @@ mod tests {
         let acct = sample_imap_account();
         let secret = SecretString::from("my-app-pass".to_string());
 
-        let plain =
-            build_sasl_credentials(&acct, &secret, PasswordAuthPreference::Plain).unwrap();
+        let plain = build_sasl_credentials(&acct, &secret, PasswordAuthPreference::Plain).unwrap();
         assert_eq!(plain.mechanism(), SaslMechanism::Plain);
         assert!(!format!("{plain:?}").contains("my-app-pass"));
 
