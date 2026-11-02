@@ -5,6 +5,8 @@ members = [
     "crates/store",
     "crates/extract",
     "crates/feeds",
+    "crates/auth",
+    "crates/engine",
 ]
 
 [workspace.package]
@@ -16,9 +18,22 @@ license = "MIT"
 debloatmail-core = { path = "crates/core" }
 debloatmail-store = { path = "crates/store" }
 debloatmail-extract = { path = "crates/extract" }
+debloatmail-feeds = { path = "crates/feeds" }
+debloatmail-auth = { path = "crates/auth" }
+debloatmail-engine = { path = "crates/engine" }
 rusqlite = { version = "0.41.1", features = ["bundled"] }
 thiserror = "2.0.21"
 mail-parser = "1.0.0"
 charset = "0.1.5"
 chardetng = "1.0.0"
 html2text = "0.17"
+io-imap = { version = "=0.7.1", default-features = false, features = ["scram", "client"] }
+io-smtp = { version = "=0.6.0", default-features = false, features = ["scram", "client"] }
+io-sasl = { version = "=0.1.0", default-features = false, features = ["scram", "saslprep"] }
+keyring = { version = "4.2.0", default-features = false, features = ["v1"] }
+secrecy = "0.10.3"
+rustls = { version = "0.23.46", default-features = false, features = ["ring", "std", "tls12"] }
+rustls-pki-types = "1.15.1"
+rustls-platform-verifier = "0.7.1"
+tokio-rustls = "0.26.6"
+tokio = { version = "1.54.1", features = ["net", "io-util", "rt-multi-thread", "sync", "time", "macros"] }
