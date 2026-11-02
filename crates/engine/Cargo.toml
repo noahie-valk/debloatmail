@@ -1,0 +1,19 @@
+[package]
+name = "debloatmail-engine"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+debloatmail-core = { workspace = true }
+debloatmail-auth = { workspace = true }
+io-imap = { workspace = true }
+io-smtp = { workspace = true }
+io-sasl = { workspace = true }
+rustls = { workspace = true }
+rustls-pki-types = { workspace = true }
+rustls-platform-verifier = { workspace = true }
+tokio-rustls = { workspace = true }
+tokio = { workspace = true }
+secrecy = { workspace = true }
+thiserror = { workspace = true }
