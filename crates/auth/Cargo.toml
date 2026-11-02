@@ -1,0 +1,12 @@
+[package]
+name = "debloatmail-auth"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+debloatmail-core = { workspace = true }
+io-sasl = { workspace = true }
+keyring = { workspace = true }
+secrecy = { workspace = true }
+thiserror = { workspace = true }
