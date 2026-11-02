@@ -72,7 +72,7 @@ pub async fn poll_feed(conn: &Connection, feed_id: i64) -> Result<(), PollError>
     // Current timestamp for `now` and `sort_at`.
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .expect("time went backwards")
+        .unwrap_or_default()
         .as_secs() as i64;
 
     // Upsert each entry.

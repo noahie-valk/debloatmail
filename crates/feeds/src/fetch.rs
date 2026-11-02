@@ -85,6 +85,17 @@ pub async fn fetch_feed(
         return Err(FetchError::BodyTooLarge);
     }
 
+    let trimmed = body.trim_ascii_start();
+    if trimmed
+        .get(..5)
+        .is_some_and(|prefix| prefix.eq_ignore_ascii_case(b"<html"))
+        || trimmed
+            .get(..14)
+            .is_some_and(|prefix| prefix.eq_ignore_ascii_case(b"<!doctype html"))
+    {
+        return Err(FetchError::HtmlContent);
+    }
+
     Ok(FetchResult {
         status,
         body: body.to_vec(),
