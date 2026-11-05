@@ -7,6 +7,7 @@ members = [
     "crates/feeds",
     "crates/auth",
     "crates/engine",
+    "crates/sync",
 ]
 
 [workspace.package]
@@ -21,6 +22,7 @@ debloatmail-extract = { path = "crates/extract" }
 debloatmail-feeds = { path = "crates/feeds" }
 debloatmail-auth = { path = "crates/auth" }
 debloatmail-engine = { path = "crates/engine" }
+debloatmail-sync = { path = "crates/sync" }
 rusqlite = { version = "0.41.1", features = ["bundled"] }
 thiserror = "2.0.21"
 mail-parser = "1.0.0"
