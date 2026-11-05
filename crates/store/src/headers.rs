@@ -1,4 +1,5 @@
-use rusqlite::{Connection, Row, params};
+use rusqlite::{Connection, OptionalExtension, Row, params};
+use std::collections::HashSet;
 use std::str::FromStr;
 
 use debloatmail_core::{
@@ -7,7 +8,9 @@ use debloatmail_core::{
 };
 
 use crate::StoreError;
+use crate::blobs::decrement_blob_ref;
 use crate::schema::bump_revision;
+
 
 /// Input data for recording a mail header during sync.
 pub struct NewMailHeader<'a> {
@@ -110,6 +113,259 @@ pub fn insert_mail_header(conn: &Connection, h: &NewMailHeader) -> Result<i64, S
     bump_revision(conn)?;
     Ok(item_id)
 }
+
+/// Attachment metadata used when seeding provisional `BODYSTRUCTURE` parts (`SYNC.md` §5.5)
+/// or reconciling authoritative extracted parts (`SYNC.md` §6.1).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NewAttachment<'a> {
+    pub section_id: &'a str,
+    pub filename: Option<&'a str>,
+    pub mime_type: &'a str,
+    pub size_bytes: Option<u64>,
+    pub content_id: Option<&'a str>,
+    pub is_pdf: bool,
+}
+
+/// Returns `true` if `item_id` has an undrained (`pending` or `in_flight`) `flag` operation
+/// in `pending_ops` (`DATA-MODEL.md` §7, `SYNC.md` §5.6 pending-op-wins rule).
+pub fn has_pending_flag_op(conn: &Connection, item_id: i64) -> Result<bool, StoreError> {
+    let count: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM pending_ops
+         WHERE item_id = ?1 AND op = 'flag' AND state IN ('pending', 'in_flight');",
+        params![item_id],
+        |r| r.get(0),
+    )?;
+    Ok(count > 0)
+}
+
+/// Idempotent header upsert keyed on `(folder_id, uidvalidity, uid)` (`SYNC.md` §11.4).
+///
+/// Returns `(item_id, inserted_new)`.
+/// If the row already exists for the same `(folder_id, uidvalidity, uid)`, updates header
+/// metadata in-place while respecting the pending-op-wins rule for flags (`SYNC.md` §5.6)
+/// and preserving any cached body text in `item_text.body`.
+pub fn upsert_mail_header(conn: &Connection, h: &NewMailHeader) -> Result<(i64, bool), StoreError> {
+    let existing_id: Option<i64> = conn
+        .query_row(
+            "SELECT item_id FROM mail_items
+             WHERE folder_id = ?1 AND uidvalidity = ?2 AND uid = ?3;",
+            params![h.folder_id, h.uidvalidity, h.uid],
+            |r| r.get(0),
+        )
+        .optional()?;
+
+    let Some(item_id) = existing_id else {
+        let id = insert_mail_header(conn, h)?;
+        return Ok((id, true));
+    };
+
+    let title_display = match h.title {
+        Some(t) if !t.trim().is_empty() => t,
+        _ => "(no subject)",
+    };
+
+    let preserve_local_flags = has_pending_flag_op(conn, item_id)?;
+
+    if preserve_local_flags {
+        conn.execute(
+            "UPDATE items SET
+                title = ?1,
+                author = ?2,
+                published_at = ?3,
+                sort_at = ?4,
+                updated_at = ?5
+             WHERE id = ?6;",
+            params![
+                title_display,
+                h.author,
+                h.published_at,
+                h.sort_at,
+                h.created_at,
+                item_id,
+            ],
+        )?;
+    } else {
+        conn.execute(
+            "UPDATE items SET
+                title = ?1,
+                author = ?2,
+                published_at = ?3,
+                sort_at = ?4,
+                unread = ?5,
+                starred = ?6,
+                answered = ?7,
+                updated_at = ?8
+             WHERE id = ?9;",
+            params![
+                title_display,
+                h.author,
+                h.published_at,
+                h.sort_at,
+                if h.unread { 1 } else { 0 },
+                if h.starred { 1 } else { 0 },
+                if h.answered { 1 } else { 0 },
+                h.created_at,
+                item_id,
+            ],
+        )?;
+    }
+
+    conn.execute(
+        "UPDATE mail_items SET
+            message_id = COALESCE(?1, message_id),
+            in_reply_to = COALESCE(?2, in_reply_to),
+            references_hdr = COALESCE(?3, references_hdr),
+            subject_norm = COALESCE(?4, subject_norm),
+            from_addr = COALESCE(?5, from_addr),
+            to_addrs = ?6,
+            cc_addrs = ?7,
+            reply_to = COALESCE(?8, reply_to),
+            internal_date = ?9,
+            size_bytes = COALESCE(?10, size_bytes),
+            flags_local = ?11
+         WHERE item_id = ?12;",
+        params![
+            h.message_id,
+            h.in_reply_to,
+            h.references_hdr,
+            h.subject_norm,
+            h.from_addr,
+            h.to_addrs_json.unwrap_or("[]"),
+            h.cc_addrs_json.unwrap_or("[]"),
+            h.reply_to,
+            h.sort_at,
+            h.size_bytes.map(|s| s as i64),
+            h.flags_local,
+            item_id,
+        ],
+    )?;
+
+    conn.execute(
+        "UPDATE item_text SET title = ?1, author = ?2 WHERE item_id = ?3;",
+        params![title_display, h.author.unwrap_or(""), item_id],
+    )?;
+
+    bump_revision(conn)?;
+    Ok((item_id, false))
+}
+
+/// Seeds provisional attachment rows from header-time `BODYSTRUCTURE` (`SYNC.md` §5.5).
+///
+/// Only runs when `items.body_state != 'cached'`. Once `BodyFetch` has run the authoritative
+/// MIME walk (`body_state == 'cached'`), header-time `BODYSTRUCTURE` is never allowed to
+/// overwrite the refined attachment list (`SYNC.md` §6.1).
+pub fn replace_provisional_attachments(
+    conn: &Connection,
+    item_id: i64,
+    attachments: &[NewAttachment<'_>],
+) -> Result<(), StoreError> {
+    let body_state: String = conn.query_row(
+        "SELECT body_state FROM items WHERE id = ?1;",
+        params![item_id],
+        |r| r.get(0),
+    )?;
+    if body_state == "cached" {
+        return Ok(());
+    }
+
+    for att in attachments {
+        conn.execute(
+            "INSERT INTO attachments (
+                item_id, section_id, filename, mime_type, size_bytes, content_id, is_pdf, blob_hash
+             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, NULL)
+             ON CONFLICT(item_id, section_id) DO UPDATE SET
+                filename = excluded.filename,
+                mime_type = excluded.mime_type,
+                size_bytes = excluded.size_bytes,
+                content_id = excluded.content_id,
+                is_pdf = excluded.is_pdf;",
+            params![
+                item_id,
+                att.section_id,
+                att.filename,
+                att.mime_type,
+                att.size_bytes.map(|s| s as i64),
+                att.content_id,
+                if att.is_pdf { 1 } else { 0 },
+            ],
+        )?;
+    }
+
+    let has_att = !attachments.is_empty();
+    conn.execute(
+        "UPDATE items SET has_attachments = ?1 WHERE id = ?2;",
+        params![if has_att { 1 } else { 0 }, item_id],
+    )?;
+
+    bump_revision(conn)?;
+    Ok(())
+}
+
+/// Reconciles `attachments` rows against the authoritative `crates/extract` body walk
+/// (`SYNC.md` §6.1 "one authority, one direction"):
+/// - Provisional parts absent from `extracted` are deleted (decrementing `blobs.refcount` if cached).
+/// - Parts present in `extracted` are inserted or updated in-place with authoritative
+///   `filename`, `mime_type`, `size_bytes`, `content_id`, and `is_pdf`.
+/// - `items.has_attachments` is updated to match `!extracted.is_empty()`.
+pub fn reconcile_extracted_attachments(
+    conn: &Connection,
+    item_id: i64,
+    extracted: &[NewAttachment<'_>],
+    now: Timestamp,
+) -> Result<(), StoreError> {
+    let keep_sections: HashSet<&str> = extracted.iter().map(|a| a.section_id).collect();
+
+    let mut stmt = conn.prepare(
+        "SELECT id, section_id, blob_hash FROM attachments WHERE item_id = ?1 ORDER BY id;",
+    )?;
+    let existing: Vec<(i64, String, Option<String>)> = stmt
+        .query_map(params![item_id], |r| {
+            Ok((r.get(0)?, r.get(1)?, r.get(2)?))
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+
+    for (att_id, section_id, blob_hash) in existing {
+        if !keep_sections.contains(section_id.as_str()) {
+            if let Some(hash) = blob_hash {
+                decrement_blob_ref(conn, &hash, now)?;
+            }
+            conn.execute("DELETE FROM attachments WHERE id = ?1;", params![att_id])?;
+        }
+    }
+
+    for att in extracted {
+        conn.execute(
+            "INSERT INTO attachments (
+                item_id, section_id, filename, mime_type, size_bytes, content_id, is_pdf, blob_hash
+             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, NULL)
+             ON CONFLICT(item_id, section_id) DO UPDATE SET
+                filename = excluded.filename,
+                mime_type = excluded.mime_type,
+                size_bytes = excluded.size_bytes,
+                content_id = excluded.content_id,
+                is_pdf = excluded.is_pdf;",
+            params![
+                item_id,
+                att.section_id,
+                att.filename,
+                att.mime_type,
+                att.size_bytes.map(|s| s as i64),
+                att.content_id,
+                if att.is_pdf { 1 } else { 0 },
+            ],
+        )?;
+    }
+
+    let has_att = !extracted.is_empty();
+    conn.execute(
+        "UPDATE items SET has_attachments = ?1 WHERE id = ?2;",
+        params![if has_att { 1 } else { 0 }, item_id],
+    )?;
+
+    bump_revision(conn)?;
+    Ok(())
+}
+
 
 /// Evict body text for a mail item (empties body, sets body_state = 'none', keeps title/author).
 pub fn evict_mail_body(conn: &Connection, item_id: i64) -> Result<(), StoreError> {
