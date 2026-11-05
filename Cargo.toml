@@ -37,3 +37,7 @@ rustls-pki-types = "1.15.1"
 rustls-platform-verifier = "0.7.1"
 tokio-rustls = "0.26.6"
 tokio = { version = "1.54.1", features = ["net", "io-util", "rt-multi-thread", "sync", "time", "macros"] }
+blake3 = "1.8.7"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0"
+
