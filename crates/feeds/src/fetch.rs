@@ -383,10 +383,11 @@ mod tests {
         let public_https = reqwest::Url::parse("https://blog.example.com/feed.xml").unwrap();
         let public_https_2 = reqwest::Url::parse("https://cdn.example.com/feed.xml").unwrap();
         let public_http = reqwest::Url::parse("http://blog.example.com/feed.xml").unwrap();
-        let loopback_target = reqwest::Url::parse("http://127.0.0.1:8080/admin").unwrap();
+        let loopback_target = reqwest::Url::parse("https://127.0.0.1:8080/admin").unwrap();
         let private_target = reqwest::Url::parse("https://192.168.1.1/router.xml").unwrap();
         let link_local_target =
             reqwest::Url::parse("http://169.254.169.254/latest/meta-data/").unwrap();
+
 
         // Valid HTTPS -> HTTPS redirect within hop limit
         assert!(validate_redirect_target(&public_https, &public_https_2, 1).is_ok());
