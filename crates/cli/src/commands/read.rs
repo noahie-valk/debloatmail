@@ -43,12 +43,30 @@ pub async fn execute_read(
             if idx > 0 {
                 println!("\n{}\n", "=".repeat(60));
             }
-            read_single_item(conn, cli, paths, tid, args.headers, args.raw, args.mark_read).await?;
+            read_single_item(
+                conn,
+                cli,
+                paths,
+                tid,
+                args.headers,
+                args.raw,
+                args.mark_read,
+            )
+            .await?;
         }
         return Ok(());
     }
 
-    read_single_item(conn, cli, paths, &public_id, args.headers, args.raw, args.mark_read).await
+    read_single_item(
+        conn,
+        cli,
+        paths,
+        &public_id,
+        args.headers,
+        args.raw,
+        args.mark_read,
+    )
+    .await
 }
 
 async fn read_single_item(
@@ -68,7 +86,7 @@ async fn read_single_item(
 
     // Check if body is cached
     let needs_fetch = if show_raw {
-        detail.raw_blob_path.as_ref().map_or(true, |p| !p.exists())
+        detail.raw_blob_path.as_ref().is_none_or(|p| !p.exists())
     } else {
         detail.summary.body_state != FfiBodyState::Cached
     };
@@ -93,14 +111,16 @@ async fn read_single_item(
     }
 
     if show_raw {
-        if let Some(ref path) = detail.raw_blob_path {
-            if path.exists() {
-                let bytes = fs::read(path)?;
-                io::stdout().write_all(&bytes)?;
-                return Ok(());
-            }
+        if let Some(ref path) = detail.raw_blob_path
+            && path.exists()
+        {
+            let bytes = fs::read(path)?;
+            io::stdout().write_all(&bytes)?;
+            return Ok(());
         }
-        return Err(CliError::NotFound("raw blob not found in cache".to_string()));
+        return Err(CliError::NotFound(
+            "raw blob not found in cache".to_string(),
+        ));
     }
 
     if show_headers {

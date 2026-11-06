@@ -7,8 +7,8 @@
 //! - Not found -> exit 3.
 //! - Stdin `-` reads IDs line-by-line.
 
-use debloatmail_ffi::{FfiAccount, FfiFeed, FfiFolder};
 use debloatmail_ffi::reader::{list_accounts_fn, list_feeds_fn, list_folders_fn};
+use debloatmail_ffi::{FfiAccount, FfiFeed, FfiFolder};
 use rusqlite::{Connection, params};
 use std::io::{self, BufRead};
 
@@ -98,7 +98,9 @@ pub fn resolve_account(conn: &Connection, input: &str) -> Result<FfiAccount, Cli
     match matches.len() {
         0 => Err(CliError::NotFound(format!("account '{trimmed}' not found"))),
         1 => Ok(matches.into_iter().next().unwrap()),
-        _ => Err(CliError::NotFound(format!("account '{trimmed}' is ambiguous"))),
+        _ => Err(CliError::NotFound(format!(
+            "account '{trimmed}' is ambiguous"
+        ))),
     }
 }
 
@@ -116,14 +118,18 @@ pub fn resolve_folder(
         .filter(|f| {
             f.id == trimmed
                 || f.name.eq_ignore_ascii_case(trimmed)
-                || f.role.as_deref().is_some_and(|r| r.eq_ignore_ascii_case(trimmed))
+                || f.role
+                    .as_deref()
+                    .is_some_and(|r| r.eq_ignore_ascii_case(trimmed))
         })
         .collect();
 
     match matches.len() {
         0 => Err(CliError::NotFound(format!("folder '{trimmed}' not found"))),
         1 => Ok(matches.into_iter().next().unwrap()),
-        _ => Err(CliError::NotFound(format!("folder '{trimmed}' is ambiguous"))),
+        _ => Err(CliError::NotFound(format!(
+            "folder '{trimmed}' is ambiguous"
+        ))),
     }
 }
 
@@ -141,7 +147,9 @@ pub fn resolve_feed(
         .filter(|f| {
             f.id == trimmed
                 || f.name.eq_ignore_ascii_case(trimmed)
-                || f.title.as_deref().is_some_and(|t| t.eq_ignore_ascii_case(trimmed))
+                || f.title
+                    .as_deref()
+                    .is_some_and(|t| t.eq_ignore_ascii_case(trimmed))
                 || f.url == trimmed
         })
         .collect();
@@ -243,7 +251,11 @@ mod tests {
         let conn = setup_test_db();
         let err = resolve_item_id(&conn, "3f").unwrap_err();
         match err {
-            CliError::AmbiguousId { prefix, count, candidates } => {
+            CliError::AmbiguousId {
+                prefix,
+                count,
+                candidates,
+            } => {
                 assert_eq!(prefix, "3f");
                 assert_eq!(count, 2);
                 assert!(candidates.contains("3f2a9c1e"));

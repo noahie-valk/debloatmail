@@ -20,7 +20,9 @@ pub async fn run(cli: Cli) -> Result<(), CliError> {
 
     // Commands that do not require a database connection
     match &cli.command {
-        Commands::Config(args) => return commands::config_cmd::execute_config(&paths, &config, args),
+        Commands::Config(args) => {
+            return commands::config_cmd::execute_config(&paths, &config, args);
+        }
         Commands::Generate(args) => return commands::generate::execute_generate(args),
         Commands::Version => return commands::generate::execute_version(),
         _ => {}
@@ -62,8 +64,8 @@ pub async fn run(cli: Cli) -> Result<(), CliError> {
         | Commands::Attachment(_)
         | Commands::Sync(_)
         | Commands::Daemon(_)
-        | Commands::Doctor(_) => {
-            Err(CliError::Usage("this action command is implemented in Phase 3C".to_string()))
-        }
+        | Commands::Doctor(_) => Err(CliError::Usage(
+            "this action command is implemented in Phase 3C".to_string(),
+        )),
     }
 }

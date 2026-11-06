@@ -2,9 +2,7 @@
 
 use chrono::{Duration, Utc};
 use debloatmail_core::{Cursor, SortKey};
-use debloatmail_ffi::reader::{
-    decode_cursor, encode_cursor, item_to_summary, query_threads_fn,
-};
+use debloatmail_ffi::reader::{decode_cursor, encode_cursor, item_to_summary, query_threads_fn};
 use debloatmail_ffi::{FfiItemSummary, FfiPage};
 use debloatmail_store::headers::row_to_item;
 use rusqlite::Connection;
@@ -23,26 +21,26 @@ pub fn parse_date_filter(s: &str) -> Result<i64, CliError> {
     }
 
     // Relative shorthand
-    if let Some(num_str) = trimmed.strip_suffix('d') {
-        if let Ok(n) = num_str.parse::<i64>() {
-            return Ok((Utc::now() - Duration::days(n)).timestamp());
-        }
-    } else if let Some(num_str) = trimmed.strip_suffix('w') {
-        if let Ok(n) = num_str.parse::<i64>() {
-            return Ok((Utc::now() - Duration::weeks(n)).timestamp());
-        }
-    } else if let Some(num_str) = trimmed.strip_suffix('h') {
-        if let Ok(n) = num_str.parse::<i64>() {
-            return Ok((Utc::now() - Duration::hours(n)).timestamp());
-        }
-    } else if let Some(num_str) = trimmed.strip_suffix('m') {
-        if let Ok(n) = num_str.parse::<i64>() {
-            return Ok((Utc::now() - Duration::minutes(n)).timestamp());
-        }
-    } else if let Some(num_str) = trimmed.strip_suffix('y') {
-        if let Ok(n) = num_str.parse::<i64>() {
-            return Ok((Utc::now() - Duration::days(n * 365)).timestamp());
-        }
+    if let Some(num_str) = trimmed.strip_suffix('d')
+        && let Ok(n) = num_str.parse::<i64>()
+    {
+        return Ok((Utc::now() - Duration::days(n)).timestamp());
+    } else if let Some(num_str) = trimmed.strip_suffix('w')
+        && let Ok(n) = num_str.parse::<i64>()
+    {
+        return Ok((Utc::now() - Duration::weeks(n)).timestamp());
+    } else if let Some(num_str) = trimmed.strip_suffix('h')
+        && let Ok(n) = num_str.parse::<i64>()
+    {
+        return Ok((Utc::now() - Duration::hours(n)).timestamp());
+    } else if let Some(num_str) = trimmed.strip_suffix('m')
+        && let Ok(n) = num_str.parse::<i64>()
+    {
+        return Ok((Utc::now() - Duration::minutes(n)).timestamp());
+    } else if let Some(num_str) = trimmed.strip_suffix('y')
+        && let Ok(n) = num_str.parse::<i64>()
+    {
+        return Ok((Utc::now() - Duration::days(n * 365)).timestamp());
     }
 
     // ISO 8601 / RFC 3339 formats
@@ -52,10 +50,10 @@ pub fn parse_date_filter(s: &str) -> Result<i64, CliError> {
     if let Ok(dt) = chrono::NaiveDateTime::parse_from_str(trimmed, "%Y-%m-%d %H:%M:%S") {
         return Ok(dt.and_utc().timestamp());
     }
-    if let Ok(d) = chrono::NaiveDate::parse_from_str(trimmed, "%Y-%m-%d") {
-        if let Some(dt) = d.and_hms_opt(0, 0, 0) {
-            return Ok(dt.and_utc().timestamp());
-        }
+    if let Ok(d) = chrono::NaiveDate::parse_from_str(trimmed, "%Y-%m-%d")
+        && let Some(dt) = d.and_hms_opt(0, 0, 0)
+    {
+        return Ok(dt.and_utc().timestamp());
     }
 
     Err(CliError::Usage(format!("invalid date format '{trimmed}'")))
@@ -70,11 +68,7 @@ pub fn sort_option_to_key(opt: SortOption) -> SortKey {
     }
 }
 
-pub fn execute_list(
-    conn: &Connection,
-    cli: &Cli,
-    args: &ListArgs,
-) -> Result<(), CliError> {
+pub fn execute_list(conn: &Connection, cli: &Cli, args: &ListArgs) -> Result<(), CliError> {
     let sort_key = sort_option_to_key(args.sort);
 
     // Keyset cursor validation
@@ -104,7 +98,11 @@ pub fn execute_list(
 
     // Thread aggregation mode
     if args.threads {
-        let limit = if args.all { 10_000 } else { args.limit.unwrap_or(25) };
+        let limit = if args.all {
+            10_000
+        } else {
+            args.limit.unwrap_or(25)
+        };
         let thread_page = query_threads_fn(
             conn,
             account_filter.as_deref(),
@@ -151,7 +149,11 @@ pub fn execute_list(
         None => None,
     };
 
-    let limit = if args.all { 10_000 } else { args.limit.unwrap_or(25) };
+    let limit = if args.all {
+        10_000
+    } else {
+        args.limit.unwrap_or(25)
+    };
 
     let page = query_items(
         conn,

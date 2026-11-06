@@ -1,7 +1,7 @@
 //! Full-text and filter search command conforming to `docs/debloatmailctl.md` §8 and §9.
 
-use debloatmail_ffi::reader::item_to_summary;
 use debloatmail_ffi::FfiPage;
+use debloatmail_ffi::reader::item_to_summary;
 use debloatmail_store::headers::row_to_item;
 use rusqlite::Connection;
 
@@ -10,11 +10,7 @@ use crate::error::CliError;
 use crate::format::format_item_page;
 use crate::search_parser::{CompiledSearch, compile_search_query};
 
-pub fn execute_search(
-    conn: &Connection,
-    cli: &Cli,
-    args: &SearchArgs,
-) -> Result<(), CliError> {
+pub fn execute_search(conn: &Connection, cli: &Cli, args: &SearchArgs) -> Result<(), CliError> {
     let compiled = compile_search_query(&args.query)?;
 
     let limit = if args.list.all {

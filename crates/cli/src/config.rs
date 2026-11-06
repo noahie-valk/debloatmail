@@ -25,11 +25,10 @@ pub struct AppPaths {
 
 impl AppPaths {
     /// Resolves paths honoring CLI overrides and standard XDG directory conventions.
-    pub fn resolve(
-        cli_config: Option<&[String]>,
-        cli_db: Option<&Path>,
-    ) -> Result<Self, CliError> {
-        let home = env::var("HOME").map(PathBuf::from).unwrap_or_else(|_| PathBuf::from("/tmp"));
+    pub fn resolve(cli_config: Option<&[String]>, cli_db: Option<&Path>) -> Result<Self, CliError> {
+        let home = env::var("HOME")
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| PathBuf::from("/tmp"));
 
         let config_home = env::var("XDG_CONFIG_HOME")
             .map(PathBuf::from)
@@ -102,10 +101,12 @@ impl AppConfig {
 
         for path in paths {
             if path.exists() {
-                let content = fs::read_to_string(path)
-                    .map_err(|e| CliError::Internal(format!("failed to read config at {}: {e}", path.display())))?;
-                let val: TomlValue = toml::from_str(&content)
-                    .map_err(|e| CliError::Usage(format!("syntax error in config {}: {e}", path.display())))?;
+                let content = fs::read_to_string(path).map_err(|e| {
+                    CliError::Internal(format!("failed to read config at {}: {e}", path.display()))
+                })?;
+                let val: TomlValue = toml::from_str(&content).map_err(|e| {
+                    CliError::Usage(format!("syntax error in config {}: {e}", path.display()))
+                })?;
                 deep_merge_toml(&mut merged, val);
             }
         }
@@ -128,11 +129,7 @@ impl AppConfig {
     }
 
     /// Sets a dotted key value and persists it to the primary configuration file.
-    pub fn set_and_save(
-        primary_path: &Path,
-        key: &str,
-        raw_val: &str,
-    ) -> Result<(), CliError> {
+    pub fn set_and_save(primary_path: &Path, key: &str, raw_val: &str) -> Result<(), CliError> {
         let mut existing_val = if primary_path.exists() {
             let content = fs::read_to_string(primary_path)?;
             toml::from_str(&content).unwrap_or_else(|_| TomlValue::Table(toml::map::Map::new()))
@@ -142,7 +139,9 @@ impl AppConfig {
 
         let parsed_val: TomlValue = toml::from_str(&format!("v = {raw_val}"))
             .map(|t| match t {
-                TomlValue::Table(mut m) => m.remove("v").unwrap_or(TomlValue::String(raw_val.to_string())),
+                TomlValue::Table(mut m) => m
+                    .remove("v")
+                    .unwrap_or(TomlValue::String(raw_val.to_string())),
                 _ => TomlValue::String(raw_val.to_string()),
             })
             .unwrap_or_else(|_| TomlValue::String(raw_val.to_string()));
@@ -239,7 +238,7 @@ mod tests {
         let cfg_path = tmp.path().join("config.toml");
 
         AppConfig::set_and_save(&cfg_path, "cache.cap_mb", "500").unwrap();
-        let loaded = AppConfig::load_merged(&[cfg_path.clone()]).unwrap();
+        let loaded = AppConfig::load_merged(std::slice::from_ref(&cfg_path)).unwrap();
         assert_eq!(loaded.get("cache.cap_mb").unwrap().as_integer(), Some(500));
 
         AppConfig::set_and_save(&cfg_path, "ui.theme", "\"solarized\"").unwrap();

@@ -30,11 +30,10 @@ pub struct CompiledSearch {
 /// Tokenizes search input respecting double quotes and negative prefixes.
 pub fn tokenize_query(input: &str) -> Vec<String> {
     let mut tokens = Vec::new();
-    let mut chars = input.chars().peekable();
     let mut current = String::new();
     let mut in_quotes = false;
 
-    while let Some(c) = chars.next() {
+    for c in input.chars() {
         match c {
             '"' => {
                 in_quotes = !in_quotes;
@@ -183,7 +182,9 @@ pub fn compile_search_query(input: &str) -> Result<CompiledSearch, CliError> {
                         });
                     }
                     unknown => {
-                        return Err(CliError::Usage(format!("unknown search filter 'is:{unknown}'")));
+                        return Err(CliError::Usage(format!(
+                            "unknown search filter 'is:{unknown}'"
+                        )));
                     }
                 },
                 "has" => match clean_val.to_ascii_lowercase().as_str() {
@@ -195,7 +196,9 @@ pub fn compile_search_query(input: &str) -> Result<CompiledSearch, CliError> {
                         });
                     }
                     unknown => {
-                        return Err(CliError::Usage(format!("unknown search filter 'has:{unknown}'")));
+                        return Err(CliError::Usage(format!(
+                            "unknown search filter 'has:{unknown}'"
+                        )));
                     }
                 },
                 "in" => {
@@ -243,7 +246,9 @@ pub fn compile_search_query(input: &str) -> Result<CompiledSearch, CliError> {
                     sql_predicates.push(format!("v.sort_at <= {ts}"));
                 }
                 unknown => {
-                    return Err(CliError::Usage(format!("unknown search operator '{unknown}:'")));
+                    return Err(CliError::Usage(format!(
+                        "unknown search operator '{unknown}:'"
+                    )));
                 }
             }
         } else {
@@ -304,8 +309,16 @@ mod tests {
             compiled.fts_query,
             Some("\"borrow\"* AND \"checker\"* AND title:\"important\"* NOT (\"draft\"*)".into())
         );
-        assert!(compiled.sql_predicates.contains(&"v.kind = 'mail'".to_string()));
-        assert!(compiled.sql_predicates.contains(&"v.unread = 1".to_string()));
+        assert!(
+            compiled
+                .sql_predicates
+                .contains(&"v.kind = 'mail'".to_string())
+        );
+        assert!(
+            compiled
+                .sql_predicates
+                .contains(&"v.unread = 1".to_string())
+        );
         assert!(
             compiled
                 .sql_predicates
@@ -331,7 +344,10 @@ mod tests {
 
         let err2 = compile_search_query("is:invalid").unwrap_err();
         assert_eq!(err2.exit_code(), 2);
-        assert!(err2.to_string().contains("unknown search filter 'is:invalid'"));
+        assert!(
+            err2.to_string()
+                .contains("unknown search filter 'is:invalid'")
+        );
     }
 
     #[test]

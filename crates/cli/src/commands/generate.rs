@@ -18,11 +18,7 @@ pub fn execute_generate(args: &GenerateArgs) -> Result<(), CliError> {
             if let Some(out_dir) = dir {
                 fs::create_dir_all(out_dir)?;
                 clap_complete::generate_to(*shell, &mut cmd, bin_name, out_dir)?;
-                println!(
-                    "Generated {:?} completion to {}",
-                    shell,
-                    out_dir.display()
-                );
+                println!("Generated {:?} completion to {}", shell, out_dir.display());
             } else {
                 clap_complete::generate(*shell, &mut cmd, bin_name, &mut io::stdout());
             }

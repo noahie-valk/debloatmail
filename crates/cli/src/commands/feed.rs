@@ -9,11 +9,7 @@ use crate::format::format_feeds;
 use crate::format::json::print_single_json;
 use crate::resolve::{resolve_account, resolve_feed};
 
-pub fn execute_feed(
-    conn: &Connection,
-    cli: &Cli,
-    args: &FeedArgs,
-) -> Result<(), CliError> {
+pub fn execute_feed(conn: &Connection, cli: &Cli, args: &FeedArgs) -> Result<(), CliError> {
     match &args.command {
         FeedCommands::List => {
             let acc_id = match cli.account.as_deref() {
@@ -45,7 +41,10 @@ pub fn execute_feed(
                 }
                 OutputFormat::Human => {
                     println!("ID:          {}", feed.id);
-                    println!("Title:       {}", feed.title.as_deref().unwrap_or(&feed.name));
+                    println!(
+                        "Title:       {}",
+                        feed.title.as_deref().unwrap_or(&feed.name)
+                    );
                     println!("URL:         {}", feed.url);
                     println!(
                         "Interval:    {}",
@@ -72,8 +71,8 @@ pub fn execute_feed(
         | FeedCommands::Update { .. }
         | FeedCommands::SetUrl { .. }
         | FeedCommands::Remove { .. }
-        | FeedCommands::Refresh { .. } => {
-            Err(CliError::Usage("feed mutating actions are implemented in Phase 3C".into()))
-        }
+        | FeedCommands::Refresh { .. } => Err(CliError::Usage(
+            "feed mutating actions are implemented in Phase 3C".into(),
+        )),
     }
 }

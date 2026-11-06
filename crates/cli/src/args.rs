@@ -292,9 +292,7 @@ pub enum FeedCommands {
     /// List configured feed subscriptions.
     List,
     /// Display detailed metadata for a single feed subscription.
-    Show {
-        name_or_id: String,
-    },
+    Show { name_or_id: String },
     /// Subscribe to a new RSS or Atom feed.
     Add {
         url: String,
@@ -314,10 +312,7 @@ pub enum FeedCommands {
         interval: Option<String>,
     },
     /// Change subscription URL (soft-remove + re-add).
-    SetUrl {
-        name_or_id: String,
-        new_url: String,
-    },
+    SetUrl { name_or_id: String, new_url: String },
     /// Remove feed subscription.
     Remove {
         name_or_id: String,
@@ -346,9 +341,7 @@ pub enum AccountCommands {
         json: bool,
     },
     /// Show account details and configuration.
-    Show {
-        name_or_id: String,
-    },
+    Show { name_or_id: String },
     /// Add a new mail or feed account.
     Add {
         #[arg(long)]
@@ -357,9 +350,7 @@ pub enum AccountCommands {
         name: Option<String>,
     },
     /// Update existing account settings.
-    Update {
-        name: String,
-    },
+    Update { name: String },
     /// Remove an account.
     Remove {
         name: String,
@@ -367,9 +358,7 @@ pub enum AccountCommands {
         purge: bool,
     },
     /// Run diagnostic checks on account connectivity.
-    Check {
-        name: Option<String>,
-    },
+    Check { name: Option<String> },
 }
 
 #[derive(Debug, Args)]
@@ -387,14 +376,9 @@ pub enum ConfigCommands {
     /// Validate configuration syntax.
     Validate,
     /// Retrieve a configuration value by dotted key path.
-    Get {
-        key: String,
-    },
+    Get { key: String },
     /// Set a configuration value and write to config file.
-    Set {
-        key: String,
-        value: String,
-    },
+    Set { key: String, value: String },
 }
 
 #[derive(Debug, Args)]

@@ -5,10 +5,7 @@ use std::io::{self, Write};
 
 use crate::error::CliError;
 
-pub fn print_item_page_plain(
-    page: &FfiPage<FfiItemSummary>,
-    print0: bool,
-) -> Result<(), CliError> {
+pub fn print_item_page_plain(page: &FfiPage<FfiItemSummary>, print0: bool) -> Result<(), CliError> {
     let mut stdout = io::stdout();
     if print0 {
         for item in &page.items {

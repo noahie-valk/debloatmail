@@ -9,11 +9,7 @@ use crate::format::format_accounts;
 use crate::format::json::print_single_json;
 use crate::resolve::resolve_account;
 
-pub fn execute_account(
-    conn: &Connection,
-    cli: &Cli,
-    args: &AccountArgs,
-) -> Result<(), CliError> {
+pub fn execute_account(conn: &Connection, cli: &Cli, args: &AccountArgs) -> Result<(), CliError> {
     match &args.command {
         AccountCommands::List { json } => {
             let accounts = list_accounts_fn(conn)?;
@@ -45,7 +41,10 @@ pub fn execute_account(
                     println!("Name:        {}", account.name);
                     println!("Kind:        {}", account.kind);
                     println!("Email:       {}", account.email);
-                    println!("Enabled:     {}", if account.enabled { "yes" } else { "no" });
+                    println!(
+                        "Enabled:     {}",
+                        if account.enabled { "yes" } else { "no" }
+                    );
                     println!(
                         "Provider:    {}",
                         account.provider_preset.as_deref().unwrap_or("generic")
@@ -63,8 +62,8 @@ pub fn execute_account(
         AccountCommands::Add { .. }
         | AccountCommands::Update { .. }
         | AccountCommands::Remove { .. }
-        | AccountCommands::Check { .. } => {
-            Err(CliError::Usage("account mutating and diagnostic actions are implemented in Phase 3C".into()))
-        }
+        | AccountCommands::Check { .. } => Err(CliError::Usage(
+            "account mutating and diagnostic actions are implemented in Phase 3C".into(),
+        )),
     }
 }

@@ -140,15 +140,15 @@ pub fn print_folders_human(folders: &[FfiFolder]) -> Result<(), CliError> {
         return Ok(());
     }
 
-    println!("{:<24} {:<12} {:<12} {:>8} {:>8}", "NAME", "ROLE", "SOURCE", "TOTAL", "UNREAD");
+    println!(
+        "{:<24} {:<12} {:<12} {:>8} {:>8}",
+        "NAME", "ROLE", "SOURCE", "TOTAL", "UNREAD"
+    );
     println!("{}", "-".repeat(68));
 
     for f in folders {
         let role = f.role.as_deref().unwrap_or("-");
-        let src = f
-            .role_source
-            .map(|s| s.as_str())
-            .unwrap_or("-");
+        let src = f.role_source.map(|s| s.as_str()).unwrap_or("-");
         println!(
             "{:<24} {:<12} {:<12} {:>8} {:>8}",
             f.name, role, src, f.item_count, f.unread_count
@@ -163,7 +163,10 @@ pub fn print_feeds_human(feeds: &[FfiFeed]) -> Result<(), CliError> {
         return Ok(());
     }
 
-    println!("{:<24} {:<36} {:>8} {:>8}", "TITLE", "URL", "INTERVAL", "UNREAD");
+    println!(
+        "{:<24} {:<36} {:>8} {:>8}",
+        "TITLE", "URL", "INTERVAL", "UNREAD"
+    );
     println!("{}", "-".repeat(80));
 
     for f in feeds {
@@ -192,7 +195,10 @@ pub fn print_accounts_human(accounts: &[FfiAccount]) -> Result<(), CliError> {
         return Ok(());
     }
 
-    println!("{:<18} {:<8} {:<28} {:<8} {:>8}", "NAME", "KIND", "EMAIL", "ENABLED", "UNREAD");
+    println!(
+        "{:<18} {:<8} {:<28} {:<8} {:>8}",
+        "NAME", "KIND", "EMAIL", "ENABLED", "UNREAD"
+    );
     println!("{}", "-".repeat(74));
 
     for a in accounts {

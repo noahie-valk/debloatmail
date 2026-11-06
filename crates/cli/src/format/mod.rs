@@ -38,10 +38,7 @@ pub fn format_thread_page(
     }
 }
 
-pub fn format_folders(
-    folders: &[FfiFolder],
-    format: OutputFormat,
-) -> Result<(), CliError> {
+pub fn format_folders(folders: &[FfiFolder], format: OutputFormat) -> Result<(), CliError> {
     match format {
         OutputFormat::Human => human::print_folders_human(folders),
         OutputFormat::Json => json::print_folders_json(folders),
@@ -50,10 +47,7 @@ pub fn format_folders(
     }
 }
 
-pub fn format_feeds(
-    feeds: &[FfiFeed],
-    format: OutputFormat,
-) -> Result<(), CliError> {
+pub fn format_feeds(feeds: &[FfiFeed], format: OutputFormat) -> Result<(), CliError> {
     match format {
         OutputFormat::Human => human::print_feeds_human(feeds),
         OutputFormat::Json => json::print_feeds_json(feeds),
@@ -62,10 +56,7 @@ pub fn format_feeds(
     }
 }
 
-pub fn format_accounts(
-    accounts: &[FfiAccount],
-    format: OutputFormat,
-) -> Result<(), CliError> {
+pub fn format_accounts(accounts: &[FfiAccount], format: OutputFormat) -> Result<(), CliError> {
     match format {
         OutputFormat::Human => human::print_accounts_human(accounts),
         OutputFormat::Json => json::print_accounts_json(accounts),
@@ -129,7 +120,10 @@ mod tests {
         let json_str = serde_json::to_string(&env).unwrap();
         assert!(json_str.contains("\"id\":\"018f3a2b-7c41-7e2a-9d3f-1a2b3c4d5e6f\""));
         assert!(json_str.contains("\"short_id\":\"3f2a9c1e\""));
-        assert!(json_str.contains("\"account\":\"018f3a9c-e4f2-7a1b-8c3d-9f0a1b2c3d4e\"") || json_str.contains("\"account_id\""));
+        assert!(
+            json_str.contains("\"account\":\"018f3a9c-e4f2-7a1b-8c3d-9f0a1b2c3d4e\"")
+                || json_str.contains("\"account_id\"")
+        );
         assert!(json_str.contains("\"cursor\":\"eyJ0IjoxNzYwMDEx…\""));
         assert!(json_str.contains("\"has_more\":true"));
     }

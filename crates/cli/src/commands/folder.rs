@@ -8,11 +8,7 @@ use crate::error::CliError;
 use crate::format::format_folders;
 use crate::resolve::resolve_account;
 
-pub fn execute_folder(
-    conn: &Connection,
-    cli: &Cli,
-    args: &FolderArgs,
-) -> Result<(), CliError> {
+pub fn execute_folder(conn: &Connection, cli: &Cli, args: &FolderArgs) -> Result<(), CliError> {
     match &args.command {
         FolderCommands::List { account } => {
             let acc_id = match account.as_deref().or(cli.account.as_deref()) {
@@ -30,8 +26,8 @@ pub fn execute_folder(
             let folders = list_folders_fn(conn, acc_id.as_deref())?;
             format_folders(&folders, cli.format)
         }
-        FolderCommands::Sync { .. } => {
-            Err(CliError::Usage("folder sync is a write mutation and is implemented in Phase 3C".into()))
-        }
+        FolderCommands::Sync { .. } => Err(CliError::Usage(
+            "folder sync is a write mutation and is implemented in Phase 3C".into(),
+        )),
     }
 }
