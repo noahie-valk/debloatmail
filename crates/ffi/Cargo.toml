@@ -1,0 +1,27 @@
+[package]
+name = "debloatmail-ffi"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Qt-free engine trait and transport boundary for debloatmail"
+
+[dependencies]
+debloatmail-core = { workspace = true }
+debloatmail-store = { workspace = true }
+debloatmail-extract = { workspace = true }
+debloatmail-feeds = { workspace = true }
+debloatmail-auth = { workspace = true }
+debloatmail-engine = { workspace = true }
+debloatmail-sync = { workspace = true }
+
+rusqlite = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+zbus = { workspace = true }
+libc = { workspace = true }
+async-trait = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

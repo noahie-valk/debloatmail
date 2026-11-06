@@ -624,6 +624,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "debloatmail-ffi"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "debloatmail-auth",
+ "debloatmail-core",
+ "debloatmail-engine",
+ "debloatmail-extract",
+ "debloatmail-feeds",
+ "debloatmail-store",
+ "debloatmail-sync",
+ "libc",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+ "tokio",
+ "zbus",
+]
+
+[[package]]
 name = "debloatmail-store"
 version = "0.1.0"
 dependencies = [
