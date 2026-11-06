@@ -1,0 +1,11 @@
+{
+  "daemon": {
+    "api_version": "1",
+    "last_sync_at": null,
+    "pending_ops": 0,
+    "running": true,
+    "state": "unknown",
+    "unread_items": 2,
+    "version": "0.1.0"
+  }
+}

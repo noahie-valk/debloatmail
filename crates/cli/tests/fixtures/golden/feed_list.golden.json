@@ -1,0 +1,13 @@
+[
+  {
+    "id": "018f3bb2-0000-7000-8000-000000000001",
+    "account_id": "018f3a9c-e4f2-7a1b-8c3d-9f0a1b2c3d4f",
+    "url": "https://blog.rust-lang.org/feed.xml",
+    "name": "Rust Blog",
+    "title": "Rust Blog",
+    "interval_secs": 3600,
+    "last_fetch_at": "2023-11-14T22:13:20Z",
+    "next_fetch_at": "2023-11-14T23:13:20Z",
+    "unread_count": 1
+  }
+]

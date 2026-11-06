@@ -1,0 +1,59 @@
+{
+  "diagnostics": [
+    {
+      "message": "loaded and validated 1 config file(s)",
+      "name": "configuration",
+      "status": "ok"
+    },
+    {
+      "message": "schema version v1 (supported <= 3)",
+      "name": "database_version",
+      "status": "ok"
+    },
+    {
+      "message": "integrity=ok, journal_mode=delete",
+      "name": "sqlite_integrity",
+      "status": "warning"
+    },
+    {
+      "message": "missing keyring credentials for: fastmail",
+      "name": "keyring_credentials",
+      "status": "warning"
+    },
+    {
+      "message": "0 blobs verified with consistent refcounts",
+      "name": "blob_refcounts",
+      "status": "ok"
+    },
+    {
+      "message": "item_text index consistent with visible_items (3 rows)",
+      "name": "fts5_consistency",
+      "status": "ok"
+    },
+    {
+      "message": "0 uidvalidity reset anomalies",
+      "name": "uidvalidity_residue",
+      "status": "ok"
+    },
+    {
+      "message": "failed_ops=0, aged_in_flight_ops=0",
+      "name": "pending_ops_queue",
+      "status": "ok"
+    },
+    {
+      "message": "0 feeds pending initial validation fetch",
+      "name": "unvalidated_feeds",
+      "status": "ok"
+    },
+    {
+      "message": "0 MB used of 500 MB configured cap",
+      "name": "cache_capacity",
+      "status": "ok"
+    },
+    {
+      "message": "running (v0.1.0, API v1, state: unknown)",
+      "name": "daemon_service",
+      "status": "ok"
+    }
+  ]
+}

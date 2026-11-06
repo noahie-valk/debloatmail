@@ -1,0 +1,6 @@
+{
+  "error": {
+    "code": "usage",
+    "message": "unknown search operator 'foo:'"
+  }
+}

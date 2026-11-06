@@ -1,0 +1,22 @@
+[
+  {
+    "id": "018f3a9c-e4f2-7a1b-8c3d-9f0a1b2c3d4e",
+    "name": "fastmail",
+    "kind": "imap",
+    "email": "alice@fastmail.com",
+    "enabled": true,
+    "provider_preset": "fastmail",
+    "last_sync_at": "2023-11-14T22:13:20Z",
+    "unread_count": 1
+  },
+  {
+    "id": "018f3a9c-e4f2-7a1b-8c3d-9f0a1b2c3d4f",
+    "name": "blogs",
+    "kind": "feed",
+    "email": "",
+    "enabled": true,
+    "provider_preset": null,
+    "last_sync_at": null,
+    "unread_count": 1
+  }
+]
