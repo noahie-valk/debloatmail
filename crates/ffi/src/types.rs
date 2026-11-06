@@ -138,6 +138,21 @@ impl fmt::Display for FfiRoleSource {
     }
 }
 
+impl FromStr for FfiRoleSource {
+    type Err = crate::error::FfiError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "special-use" | "special_use" => Ok(Self::SpecialUse),
+            "name" => Ok(Self::Name),
+            "manual" => Ok(Self::Manual),
+            other => Err(crate::error::FfiError::InvalidArgument(format!(
+                "invalid role source: {other}"
+            ))),
+        }
+    }
+}
+
 impl From<RoleSource> for FfiRoleSource {
     fn from(source: RoleSource) -> Self {
         match source {

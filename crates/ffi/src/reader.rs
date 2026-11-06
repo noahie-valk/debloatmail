@@ -229,7 +229,10 @@ pub fn query_threads_fn(
     _cursor: Option<&str>,
 ) -> Result<FfiPage<FfiThreadSummary>, FfiError> {
     let mut stmt = conn.prepare(
-        "SELECT t.public_id, a.public_id, t.display_subject, t.item_count, t.unread_count, t.last_activity
+        "SELECT t.public_id, a.public_id, t.display_subject,
+                (SELECT COUNT(*) FROM items i WHERE i.thread_id = t.id AND i.hidden_at IS NULL) AS reply_count,
+                (SELECT COUNT(*) FROM items i WHERE i.thread_id = t.id AND i.unread = 1 AND i.hidden_at IS NULL) AS unread_count,
+                t.last_activity
          FROM threads t
          JOIN accounts a ON a.id = t.account_id
          WHERE (?1 IS NULL OR a.public_id = ?1)
@@ -472,28 +475,31 @@ pub fn list_feeds_fn(
     account_id: Option<&str>,
 ) -> Result<Vec<FfiFeed>, FfiError> {
     let mut stmt = conn.prepare(
-        "SELECT f.public_id, a.public_id, f.url, f.name, f.title, f.interval_secs,
+        "SELECT f.public_id, a.public_id, f.url, f.title, f.interval_secs,
                 f.last_fetch_at, f.next_fetch_at,
                 (SELECT COUNT(*) FROM visible_items v WHERE v.feed_id = f.id AND v.unread = 1) AS unread_cnt
          FROM feeds f
          JOIN accounts a ON a.id = f.account_id
-         WHERE f.removed_at IS NULL AND (?1 IS NULL OR a.public_id = ?1 OR a.name = ?1)
+         WHERE f.removed_at IS NULL AND (?1 IS NULL OR a.public_id = ?1)
          ORDER BY f.id ASC;",
     )?;
 
     let rows = stmt.query_map(params![account_id], |r| {
-        let last_fetch: Option<i64> = r.get(6)?;
-        let next_fetch: Option<i64> = r.get(7)?;
+        let url: String = r.get(2)?;
+        let title: Option<String> = r.get(3)?;
+        let name = title.clone().unwrap_or_else(|| url.clone());
+        let last_fetch: Option<i64> = r.get(5)?;
+        let next_fetch: Option<i64> = r.get(6)?;
         Ok(FfiFeed {
             id: r.get(0)?,
             account_id: r.get(1)?,
-            url: r.get(2)?,
-            name: r.get(3)?,
-            title: r.get(4)?,
-            interval_secs: r.get(5)?,
+            url,
+            name,
+            title,
+            interval_secs: r.get::<_, Option<u32>>(4)?.unwrap_or(0),
             last_fetch_at: last_fetch.map(format_timestamp),
             next_fetch_at: next_fetch.map(format_timestamp),
-            unread_count: r.get(8)?,
+            unread_count: r.get(7)?,
         })
     })?;
 
@@ -508,7 +514,7 @@ pub fn get_feed_fn(conn: &Connection, public_id: &str) -> Result<FfiFeed, FfiErr
     let feeds = list_feeds_fn(conn, None)?;
     feeds
         .into_iter()
-        .find(|f| f.id == public_id || f.name == public_id)
+        .find(|f| f.id == public_id || f.name == public_id || f.url == public_id)
         .ok_or_else(|| FfiError::NotFound(public_id.to_string()))
 }
 
