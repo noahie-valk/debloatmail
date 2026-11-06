@@ -19,7 +19,8 @@ Phase 1 (`core` + `store`), **Phase 2A (`crates/extract` + MIME fixtures & deter
   - Sole-writer architecture ready for daemon execution; read-only WAL access for queries.
   - Keyset pagination with total-order cursors for stream views.
   - FTS5 search query parsing with adversarial quote sanitization.
-  - 6 unit tests passing.
+  - Content-addressed BLAKE3 blob store (`blobs.rs`), JWZ-lite account threading (`threads.rs`), and header/attachment reconciliation (`headers.rs`).
+  - 8 unit tests passing.
 
 #### B. Phase 2A: MIME Parsing & Text Extraction (`crates/extract`)
 - Conforms strictly to Invariant 4: pure byte slices in, structures out; zero async runtime, filesystem, database, or socket dependencies; depends solely on `core` and approved parsing libraries (`mail-parser`, `charset`, `chardetng`, `html2text`, `thiserror`).
