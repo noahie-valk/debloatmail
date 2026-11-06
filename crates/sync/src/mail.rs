@@ -6,16 +6,16 @@ use std::collections::{HashMap, HashSet};
 use std::num::{NonZeroU32, NonZeroU64};
 
 use debloatmail_core::{FolderRole, PublicId, RoleSource, Timestamp};
+use debloatmail_engine::imap::HEADER_FETCH_WINDOW_SIZE;
 use debloatmail_engine::io::AsyncByteStream;
 use debloatmail_engine::{
-    Clock, DiscoveredFolder, HEADER_FETCH_WINDOW_SIZE, ImapConnection, Rng, discover_folders,
-    fetch_header_window,
+    Clock, DiscoveredFolder, ImapConnection, Rng, discover_folders, fetch_header_window,
 };
 use debloatmail_extract::header::{clean_msg_id, normalize_subject};
 use debloatmail_extract::structure::derive_title;
 use debloatmail_store::{
-    NewAttachment, UpsertMailHeader, decrement_blob_ref, has_pending_flag_op,
-    rebuild_account_threads, replace_provisional_attachments, set_meta, upsert_mail_header,
+    NewAttachment, NewMailHeader, decrement_blob_ref, has_pending_flag_op, rebuild_account_threads,
+    replace_provisional_attachments, upsert_mail_header,
 };
 use io_imap::client::ImapClientAsync;
 use io_imap::rfc3501::fetch::{ImapMessageFetch, ImapMessageFetchOptions};
@@ -28,11 +28,9 @@ use io_imap::types::body::{BodyStructure, SpecificFields};
 use io_imap::types::command::FetchModifier;
 use io_imap::types::core::{NString, Vec1};
 use io_imap::types::envelope::{Address, Envelope};
-use io_imap::types::fetch::{
-    MacroOrMessageDataItemNames, MessageDataItem, MessageDataItemName,
-};
+use io_imap::types::fetch::{MacroOrMessageDataItemNames, MessageDataItem, MessageDataItemName};
 use io_imap::types::flag::{Flag, FlagFetch};
-use io_imap::types::mailbox::Mailbox;
+use io_imap::types::mailbox::{ListCharString, ListMailbox, Mailbox};
 use io_imap::types::search::SearchKey;
 use io_imap::types::sequence::{SeqOrUid, Sequence, SequenceSet};
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
@@ -56,6 +54,30 @@ pub struct FolderReconcileReport {
     pub inserted: usize,
     pub updated: usize,
     pub unsubscribed_missing: usize,
+}
+
+/// Owned provisional attachment extracted from an IMAP `BODYSTRUCTURE` tree (`SYNC.md` §5.5).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProvisionalAttachment {
+    pub section_id: String,
+    pub filename: Option<String>,
+    pub mime_type: String,
+    pub size_bytes: Option<u64>,
+    pub content_id: Option<String>,
+    pub is_pdf: bool,
+}
+
+impl ProvisionalAttachment {
+    pub fn as_new_attachment(&self) -> NewAttachment<'_> {
+        NewAttachment {
+            section_id: &self.section_id,
+            filename: self.filename.as_deref(),
+            mime_type: &self.mime_type,
+            size_bytes: self.size_bytes,
+            content_id: self.content_id.as_deref(),
+            is_pdf: self.is_pdf,
+        }
+    }
 }
 
 /// Summary of a folder sync pass (`SYNC.md` §5.4–5.6).
@@ -82,7 +104,13 @@ pub async fn reconcile_account_folders<S: AsyncByteStream>(
     clock: &dyn Clock,
     rng: &mut dyn Rng,
 ) -> Result<FolderReconcileReport, SyncError> {
-    let listing = imap_conn.run(ImapMailboxList::new()).await?;
+    let wildcard = ListMailbox::try_from("*")
+        .unwrap_or_else(|_| ListMailbox::Token(ListCharString::unvalidated("*")));
+    let reference = Mailbox::try_from("").unwrap_or(Mailbox::Inbox);
+    let listing = imap_conn
+        .run(ImapMailboxList::new(reference, wildcard))
+        .await
+        .map_err(debloatmail_engine::EngineError::from)?;
     let discovered = discover_folders(listing);
     reconcile_discovered_folders(conn, account_id, &discovered, clock, rng)
 }
@@ -306,8 +334,7 @@ where
     let server_uidvalidity = select_data.uid_validity.map(NonZeroU32::get).unwrap_or(1);
     let server_uidnext = select_data.uid_next.map(NonZeroU32::get).unwrap_or(1);
 
-    let uidvalidity_mismatch =
-        folder.uidvalidity != 0 && server_uidvalidity != folder.uidvalidity;
+    let uidvalidity_mismatch = folder.uidvalidity != 0 && server_uidvalidity != folder.uidvalidity;
     let uidnext_regressed = folder.uidnext != 0 && server_uidnext < folder.uidnext;
 
     let report = if full_sync || uidvalidity_mismatch || uidnext_regressed {
@@ -337,7 +364,7 @@ where
             &folder,
             server_uidvalidity,
             server_uidnext,
-            & HashMap::new(),
+            &HashMap::new(),
             cancel_token,
             &mut should_preempt,
             clock,
@@ -362,15 +389,18 @@ where
 
     {
         let tx = conn.transaction()?;
-        rebuild_account_threads(&tx, folder.account_id)?;
+        rebuild_account_threads(&tx, folder.account_id, || {
+            mint_uuid_v7_from_clock(clock, rng).to_string()
+        })?;
         tx.commit()?;
     }
 
     Ok(report)
 }
 
+/// Snapshot of a `folders` row used during header/flag sync.
 #[derive(Debug, Clone)]
-pub(crate) struct FolderRowState {
+pub struct FolderRowState {
     pub id: i64,
     pub public_id: String,
     pub account_id: i64,
@@ -382,10 +412,7 @@ pub(crate) struct FolderRowState {
     pub subscribed: bool,
 }
 
-pub(crate) fn load_folder_state(
-    conn: &Connection,
-    folder_id: i64,
-) -> Result<FolderRowState, SyncError> {
+pub fn load_folder_state(conn: &Connection, folder_id: i64) -> Result<FolderRowState, SyncError> {
     conn.query_row(
         "SELECT id, public_id, account_id, name, role, uidvalidity, uidnext, highestmodseq, subscribed
          FROM folders
@@ -410,14 +437,6 @@ pub(crate) fn load_folder_state(
 }
 
 /// Executes the 7-step `UIDVALIDITY` staged recovery algorithm (`SYNC.md` §5.4).
-///
-/// 1. Detect mismatch (`server_uidvalidity != stored_uidvalidity`, `UIDNEXT` regression, or `--full`).
-/// 2. Build `Message-ID -> public_id` preservation map from existing rows in `folder_id`.
-/// 3. Snapshot queued `pending_ops` (`pending` / `in_flight`) referencing items in `folder_id`.
-/// 4. Delete stale `items` in `folder_id` in one transaction (`pending_ops.item_id` -> `NULL`).
-/// 5. Refetch headers in 2,000-UID windows, reusing `public_id`s where `Message-ID` matches.
-/// 6. Rebind snapshotted `pending_ops` to the new `items.id` rows where `Message-ID` reappeared.
-/// 7. Advance `folders.(uidvalidity, uidnext, highestmodseq, last_sync_at)` in the final commit.
 #[allow(clippy::too_many_arguments)]
 pub async fn run_uidvalidity_staged_recovery<S: AsyncByteStream, F>(
     conn: &mut Connection,
@@ -435,6 +454,7 @@ where
     let server_uidvalidity = select_data.uid_validity.map(NonZeroU32::get).unwrap_or(1);
     let server_uidnext = select_data.uid_next.map(NonZeroU32::get).unwrap_or(1);
     let server_modseq = select_data.highest_mod_seq.unwrap_or(0);
+    let now = clock.now_secs();
 
     // Step 2 & 3 & 4: Build Message-ID preservation map, snapshot pending_ops, and delete stale items.
     let (preserved_id_map, snapshotted_ops) = {
@@ -481,7 +501,7 @@ where
         }
 
         // Decrement blob refcounts for raw_blob and attachments of items in this folder before deleting
-        decrement_folder_item_blobs(&tx, folder.id)?;
+        decrement_folder_item_blobs(&tx, folder.id, now)?;
 
         // Step 4: Delete all items in this folder (ON DELETE SET NULL sets pending_ops.item_id = NULL)
         tx.execute(
@@ -556,7 +576,7 @@ where
         }
 
         if !report.preempted {
-            let now = clock.now_secs();
+            let commit_now = clock.now_secs();
             tx.execute(
                 "UPDATE folders
                  SET uidvalidity = ?1,
@@ -568,14 +588,18 @@ where
                     i64::from(server_uidvalidity),
                     i64::from(server_uidnext),
                     server_modseq as i64,
-                    now,
+                    commit_now,
                     folder.id,
                 ],
             )?;
         }
 
         let meta_key = format!("uidvalidity_unpreserved:{}", folder.public_id);
-        set_meta(&tx, &meta_key, &report.unpreserved_ids.to_string())?;
+        tx.execute(
+            "INSERT INTO meta (key, value) VALUES (?1, ?2)
+             ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            params![meta_key, report.unpreserved_ids.to_string()],
+        )?;
 
         tx.commit()?;
         report.rebound_ops = rebound;
@@ -586,9 +610,6 @@ where
 
 /// Fetches missing headers in 2,000-UID windows, committing each window and its `folders.uidnext`
 /// watermark in the same SQLite transaction (`SYNC.md` §5.5, §11.3).
-///
-/// Checks `cancel_token` and `should_preempt` between windows so interactive requests preempt
-/// background header sync cleanly at window boundaries without losing committed progress.
 #[allow(clippy::too_many_arguments)]
 pub async fn sync_folder_headers_windowed<S: AsyncByteStream, F>(
     conn: &mut Connection,
@@ -656,43 +677,53 @@ where
                     };
 
                     let flags_json = serde_json::to_string(&parsed.custom_keywords)?;
-                    let upsert_input = UpsertMailHeader {
-                        public_id: chosen_public_id,
+                    let to_json = parsed
+                        .to_addrs
+                        .as_ref()
+                        .and_then(|v| serde_json::to_string(v).ok());
+                    let cc_json = parsed
+                        .cc_addrs
+                        .as_ref()
+                        .and_then(|v| serde_json::to_string(v).ok());
+
+                    let header_input = NewMailHeader {
+                        public_id: chosen_public_id.as_str(),
                         account_id: folder.account_id,
                         folder_id: folder.id,
-                        uidvalidity: server_uidvalidity,
                         uid: parsed.uid,
-                        message_id: parsed.message_id,
-                        in_reply_to: parsed.in_reply_to,
-                        references_hdr: None,
-                        from_addr: parsed.from_addr,
-                        to_addrs: parsed.to_addrs,
-                        cc_addrs: parsed.cc_addrs,
-                        reply_to: parsed.reply_to,
-                        subject_norm: parsed.subject_norm,
-                        title: parsed.title,
-                        author: parsed.author,
+                        uidvalidity: server_uidvalidity,
+                        title: Some(&parsed.title),
+                        author: parsed.author.as_deref(),
                         published_at: parsed.published_at,
                         sort_at: parsed.sort_at,
-                        size_bytes: parsed.size_bytes,
                         unread: parsed.unread,
                         starred: parsed.starred,
                         answered: parsed.answered,
                         has_attachments: !parsed.attachments.is_empty(),
-                        flags_local_json: flags_json,
-                        now,
+                        message_id: parsed.message_id.as_deref(),
+                        in_reply_to: parsed.in_reply_to.as_deref(),
+                        references_hdr: None,
+                        subject_norm: Some(&parsed.subject_norm),
+                        from_addr: parsed.from_addr.as_deref(),
+                        to_addrs_json: to_json.as_deref(),
+                        cc_addrs_json: cc_json.as_deref(),
+                        reply_to: parsed.reply_to.as_deref(),
+                        size_bytes: parsed.size_bytes,
+                        flags_local: &flags_json,
+                        created_at: now,
                     };
 
-                    let outcome = upsert_mail_header(&tx, &upsert_input)?;
+                    let (item_id, inserted) = upsert_mail_header(&tx, &header_input)?;
                     if !parsed.attachments.is_empty() {
-                        replace_provisional_attachments(
-                            &tx,
-                            outcome.item_id,
-                            &parsed.attachments,
-                        )?;
+                        let borrowed: Vec<NewAttachment<'_>> = parsed
+                            .attachments
+                            .iter()
+                            .map(ProvisionalAttachment::as_new_attachment)
+                            .collect();
+                        replace_provisional_attachments(&tx, item_id, &borrowed)?;
                     }
 
-                    if outcome.inserted {
+                    if inserted {
                         report.inserted_items += 1;
                     } else {
                         report.updated_items += 1;
@@ -745,16 +776,12 @@ pub async fn sync_folder_flags_and_expunges<S: AsyncByteStream>(
 
     // 1. Flag sync (CONDSTORE vs fallback window)
     if server_uidnext > 1 {
-        let use_condstore = imap_conn.capabilities.condstore
-            && folder.highestmodseq > 0
-            && !first_sync_after_reset;
+        let use_condstore =
+            imap_conn.capabilities.condstore && folder.highestmodseq > 0 && !first_sync_after_reset;
 
         let flag_rows = if use_condstore {
             if let Some(modseq_nz) = NonZeroU64::new(folder.highestmodseq) {
-                let seq = Sequence::Range(
-                    SeqOrUid::Value(NonZeroU32::MIN),
-                    SeqOrUid::Asterisk,
-                );
+                let seq = Sequence::Range(SeqOrUid::Value(NonZeroU32::MIN), SeqOrUid::Asterisk);
                 let items = MacroOrMessageDataItemNames::MessageDataItemNames(vec![
                     MessageDataItemName::Uid,
                     MessageDataItemName::Flags,
@@ -860,18 +887,16 @@ pub async fn sync_folder_flags_and_expunges<S: AsyncByteStream>(
     if !select_data.vanished_earlier.is_empty() {
         let tx = conn.transaction()?;
         for uid_nz in &select_data.vanished_earlier {
-            expunged_count += delete_local_item_by_uid(&tx, folder.id, uid_nz.get())?;
+            expunged_count += delete_local_item_by_uid(&tx, folder.id, uid_nz.get(), now)?;
         }
         tx.commit()?;
     } else if !first_sync_after_reset {
         let local_uids: Vec<u32> = {
-            let mut stmt = conn.prepare(
-                "SELECT uid FROM mail_items WHERE folder_id = ?1 AND uid < ?2",
-            )?;
-            let rows = stmt.query_map(
-                params![folder.id, i64::from(server_uidnext)],
-                |row| Ok(row.get::<_, i64>(0)?.max(0) as u32),
-            )?;
+            let mut stmt =
+                conn.prepare("SELECT uid FROM mail_items WHERE folder_id = ?1 AND uid < ?2")?;
+            let rows = stmt.query_map(params![folder.id, i64::from(server_uidnext)], |row| {
+                Ok(row.get::<_, i64>(0)?.max(0) as u32)
+            })?;
             rows.collect::<Result<Vec<_>, _>>()?
         };
 
@@ -890,7 +915,7 @@ pub async fn sync_folder_flags_and_expunges<S: AsyncByteStream>(
             let tx = conn.transaction()?;
             for local_uid in local_uids {
                 if !server_uid_set.contains(&local_uid) {
-                    expunged_count += delete_local_item_by_uid(&tx, folder.id, local_uid)?;
+                    expunged_count += delete_local_item_by_uid(&tx, folder.id, local_uid, now)?;
                 }
             }
             tx.commit()?;
@@ -908,7 +933,11 @@ pub async fn sync_folder_flags_and_expunges<S: AsyncByteStream>(
     Ok(expunged_count)
 }
 
-fn decrement_folder_item_blobs(tx: &Transaction<'_>, folder_id: i64) -> Result<(), SyncError> {
+fn decrement_folder_item_blobs(
+    tx: &Transaction<'_>,
+    folder_id: i64,
+    now: Timestamp,
+) -> Result<(), SyncError> {
     let raw_blobs: Vec<String> = {
         let mut stmt = tx.prepare(
             "SELECT raw_blob FROM mail_items
@@ -918,7 +947,7 @@ fn decrement_folder_item_blobs(tx: &Transaction<'_>, folder_id: i64) -> Result<(
         rows.collect::<Result<Vec<_>, _>>()?
     };
     for hash in raw_blobs {
-        decrement_blob_ref(tx, &hash)?;
+        decrement_blob_ref(tx, &hash, now)?;
     }
 
     let att_blobs: Vec<String> = {
@@ -932,7 +961,7 @@ fn decrement_folder_item_blobs(tx: &Transaction<'_>, folder_id: i64) -> Result<(
         rows.collect::<Result<Vec<_>, _>>()?
     };
     for hash in att_blobs {
-        decrement_blob_ref(tx, &hash)?;
+        decrement_blob_ref(tx, &hash, now)?;
     }
     Ok(())
 }
@@ -941,6 +970,7 @@ fn delete_local_item_by_uid(
     tx: &Transaction<'_>,
     folder_id: i64,
     uid: u32,
+    now: Timestamp,
 ) -> Result<usize, SyncError> {
     let row: Option<(i64, Option<String>)> = tx
         .query_row(
@@ -955,7 +985,7 @@ fn delete_local_item_by_uid(
     };
 
     if let Some(hash) = raw_blob {
-        decrement_blob_ref(tx, &hash)?;
+        decrement_blob_ref(tx, &hash, now)?;
     }
 
     let att_blobs: Vec<String> = {
@@ -966,7 +996,7 @@ fn delete_local_item_by_uid(
         rows.collect::<Result<Vec<_>, _>>()?
     };
     for hash in att_blobs {
-        decrement_blob_ref(tx, &hash)?;
+        decrement_blob_ref(tx, &hash, now)?;
     }
 
     let deleted = tx.execute("DELETE FROM items WHERE id = ?1", params![item_id])?;
@@ -987,12 +1017,12 @@ struct ParsedHeaderMetadata {
     subject_norm: String,
     author: Option<String>,
     from_addr: Option<String>,
-    to_addrs: Option<String>,
-    cc_addrs: Option<String>,
+    to_addrs: Option<Vec<String>>,
+    cc_addrs: Option<Vec<String>>,
     reply_to: Option<String>,
     message_id: Option<String>,
     in_reply_to: Option<String>,
-    attachments: Vec<NewAttachment>,
+    attachments: Vec<ProvisionalAttachment>,
 }
 
 fn extract_uid_and_flags(
@@ -1020,8 +1050,8 @@ fn extract_uid_and_flags(
                             Flag::Keyword(atom) => {
                                 custom_keywords.push(atom.as_ref().to_string());
                             }
-                            Flag::Extension(ext) => {
-                                custom_keywords.push(format!("\\{}", ext.as_ref()));
+                            Flag::Extension(_) => {
+                                custom_keywords.push(flag.to_string());
                             }
                         }
                     }
@@ -1068,8 +1098,8 @@ fn parse_fetched_header_items(
                             Flag::Keyword(atom) => {
                                 custom_keywords.push(atom.as_ref().to_string());
                             }
-                            Flag::Extension(ext) => {
-                                custom_keywords.push(format!("\\{}", ext.as_ref()));
+                            Flag::Extension(_) => {
+                                custom_keywords.push(flag.to_string());
                             }
                         }
                     }
@@ -1158,8 +1188,8 @@ fn parse_envelope_fields(
     String,
     Option<String>,
     Option<String>,
-    Option<String>,
-    Option<String>,
+    Option<Vec<String>>,
+    Option<Vec<String>>,
     Option<String>,
     Option<String>,
     Option<String>,
@@ -1173,25 +1203,23 @@ fn parse_envelope_fields(
     let subject_norm = normalize_subject(decoded_subject.as_deref());
 
     let (author, from_addr) = extract_author_and_from(&env.from);
-    let to_addrs = format_address_list(&env.to);
-    let cc_addrs = format_address_list(&env.cc);
-    let reply_to = format_address_list(&env.reply_to);
+    let to_addrs = extract_address_vec(&env.to);
+    let cc_addrs = extract_address_vec(&env.cc);
+    let reply_to = extract_address_vec(&env.reply_to).and_then(|v| v.into_iter().next());
 
     let message_id = nstring_to_string(&env.message_id)
         .map(|s| clean_msg_id(&s))
         .filter(|s| !s.is_empty());
 
-    let in_reply_to = nstring_to_string(&env.in_reply_to)
-        .and_then(|s| {
-            s.split_whitespace()
-                .next()
-                .map(clean_msg_id)
-                .filter(|id| !id.is_empty())
-        });
+    let in_reply_to = nstring_to_string(&env.in_reply_to).and_then(|s| {
+        s.split_whitespace()
+            .next()
+            .map(clean_msg_id)
+            .filter(|id| !id.is_empty())
+    });
 
-    let published_at = nstring_to_string(&env.date)
-        .and_then(|d| chrono::DateTime::parse_from_rfc2822(d.trim()).ok())
-        .map(|dt| dt.timestamp());
+    let published_at =
+        nstring_to_string(&env.date).and_then(|d| parse_rfc2822_date_via_extract(&d));
 
     (
         title,
@@ -1207,6 +1235,23 @@ fn parse_envelope_fields(
     )
 }
 
+fn parse_rfc2822_date_via_extract(raw_date: &str) -> Option<Timestamp> {
+    let clean: String = raw_date
+        .chars()
+        .filter(|&c| c != '\r' && c != '\n')
+        .collect();
+    if clean.trim().is_empty() {
+        return None;
+    }
+    let synthetic = format!("Date: {}\r\n\r\n", clean.trim());
+    debloatmail_extract::extract_message(
+        synthetic.as_bytes(),
+        &debloatmail_extract::Limits::default(),
+    )
+    .ok()
+    .and_then(|ext| ext.date)
+}
+
 fn nstring_to_string(ns: &NString<'_>) -> Option<String> {
     ns.0.as_ref()
         .map(|istr| String::from_utf8_lossy(istr.as_ref()).into_owned())
@@ -1220,11 +1265,12 @@ fn decode_rfc2047_header_text(header_name: &str, raw_val: &str) -> String {
     if !clean.contains("=?") {
         return clean.trim().to_string();
     }
-    // Use extract_message on a tiny synthetic header block so all RFC 2047 decoding stays in crates/extract.
     let synthetic = format!("{header_name}: {clean}\r\n\r\n");
     if header_name.eq_ignore_ascii_case("Subject")
-        && let Ok(ext) =
-            debloatmail_extract::extract_message(synthetic.as_bytes(), &debloatmail_extract::Limits::default())
+        && let Ok(ext) = debloatmail_extract::extract_message(
+            synthetic.as_bytes(),
+            &debloatmail_extract::Limits::default(),
+        )
         && ext.title != "(no subject)"
     {
         return ext.title;
@@ -1260,7 +1306,7 @@ fn extract_author_and_from(addrs: &[Address<'_>]) -> (Option<String>, Option<Str
     (None, None)
 }
 
-fn format_address_list(addrs: &[Address<'_>]) -> Option<String> {
+fn extract_address_vec(addrs: &[Address<'_>]) -> Option<Vec<String>> {
     let mut list = Vec::new();
     for addr in addrs {
         let mailbox = nstring_to_string(&addr.mailbox)
@@ -1273,41 +1319,23 @@ fn format_address_list(addrs: &[Address<'_>]) -> Option<String> {
             list.push(format!("{m}@{h}"));
         }
     }
-    if list.is_empty() {
-        None
-    } else {
-        Some(list.join(", "))
-    }
+    if list.is_empty() { None } else { Some(list) }
 }
 
 /// Walks an IMAP `BODYSTRUCTURE` tree to assign RFC 3501 §6.4.5 `section_id`s and
 /// seed provisional `attachments` rows (`SYNC.md` §5.5; `MIME-AND-TEXT.md` §6).
 pub fn extract_provisional_attachments_from_bodystructure(
     bs: &BodyStructure<'_>,
-) -> Vec<NewAttachment> {
+) -> Vec<ProvisionalAttachment> {
     let mut attachments = Vec::new();
     let mut has_body_candidate = false;
 
     match bs {
         BodyStructure::Single { .. } => {
-            walk_bodystructure_node(
-                bs,
-                "1",
-                false,
-                &mut has_body_candidate,
-                &mut attachments,
-                1,
-            );
+            walk_bodystructure_node(bs, "1", false, &mut has_body_candidate, &mut attachments, 1);
         }
         BodyStructure::Multi { .. } => {
-            walk_bodystructure_node(
-                bs,
-                "",
-                false,
-                &mut has_body_candidate,
-                &mut attachments,
-                1,
-            );
+            walk_bodystructure_node(bs, "", false, &mut has_body_candidate, &mut attachments, 1);
         }
     }
 
@@ -1319,7 +1347,7 @@ fn walk_bodystructure_node(
     section_prefix: &str,
     in_alternative: bool,
     has_body_candidate: &mut bool,
-    attachments: &mut Vec<NewAttachment>,
+    attachments: &mut Vec<ProvisionalAttachment>,
     depth: usize,
 ) {
     if depth > MAX_BODYSTRUCTURE_DEPTH || attachments.len() >= MAX_BODYSTRUCTURE_ATTACHMENTS {
@@ -1380,22 +1408,15 @@ fn walk_bodystructure_node(
 
             let is_text_body_type =
                 main_type == "text" && (sub_type == "plain" || sub_type == "html");
-            let is_attachment = if disp_is_attachment || filename.is_some() {
-                true
-            } else if main_type == "message"
+            let is_attachment = if disp_is_attachment
+                || filename.is_some()
+                || main_type == "message"
                 || (main_type == "text" && sub_type == "calendar")
             {
                 true
-            } else if is_text_body_type {
-                if in_alternative {
-                    *has_body_candidate = true;
-                    false
-                } else if !*has_body_candidate {
-                    *has_body_candidate = true;
-                    false
-                } else {
-                    true
-                }
+            } else if is_text_body_type && (in_alternative || !*has_body_candidate) {
+                *has_body_candidate = true;
+                false
             } else {
                 true
             };
@@ -1413,7 +1434,7 @@ fn walk_bodystructure_node(
                     section_prefix.to_string()
                 };
 
-                attachments.push(NewAttachment {
+                attachments.push(ProvisionalAttachment {
                     section_id,
                     filename,
                     mime_type,
@@ -1435,7 +1456,6 @@ fn walk_bodystructure_node(
 
             for (idx, child) in bodies.as_ref().iter().enumerate() {
                 if is_signed && idx > 0 {
-                    // Discard detached signature part per MIME-AND-TEXT.md §6.2
                     break;
                 }
                 let child_section = if section_prefix.is_empty() {
