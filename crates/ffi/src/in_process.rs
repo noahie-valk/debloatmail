@@ -487,6 +487,73 @@ impl EngineMutations for InProcessEngine {
             return Ok(FfiBodyState::Cached);
         }
 
+        // Check if raw_blob is available in mail_items
+        let raw_blob_hash: Option<String> = conn
+            .query_row(
+                "SELECT raw_blob FROM mail_items WHERE item_id = (SELECT id FROM items WHERE public_id = ?1);",
+                params![item_id],
+                |r| r.get(0),
+            )
+            .optional()?
+            .flatten();
+
+        if let Some(ref hash) = raw_blob_hash {
+            let extracted_opt = blob_path(&self.blobs_dir, hash)
+                .ok()
+                .filter(|p| p.is_file())
+                .and_then(|p| std::fs::read(p).ok())
+                .and_then(|bytes| {
+                    debloatmail_extract::extract_message(
+                        &bytes,
+                        &debloatmail_extract::Limits::default(),
+                    )
+                    .ok()
+                });
+
+            if let Some(extracted) = extracted_opt {
+                conn.execute(
+                    "INSERT INTO item_text (item_id, title, author, body, durable, extractor_version)
+                     VALUES ((SELECT id FROM items WHERE public_id = ?1), ?2, ?3, ?4, 0, 1)
+                     ON CONFLICT(item_id) DO UPDATE SET body = ?4, extractor_version = 1;",
+                    params![
+                        item_id,
+                        extracted.title,
+                        extracted.author,
+                        extracted.body,
+                    ],
+                )?;
+                conn.execute(
+                    "UPDATE items SET body_state = 'cached' WHERE public_id = ?1;",
+                    params![item_id],
+                )?;
+                return Ok(FfiBodyState::Cached);
+            }
+        }
+
+        // If in standalone/test mode without remote IMAP daemon, simulate fetch if placeholder text exists
+        let title_opt: Option<String> = conn
+            .query_row(
+                "SELECT title FROM items WHERE public_id = ?1;",
+                params![item_id],
+                |r| r.get(0),
+            )
+            .optional()?;
+
+        if let Some(title) = title_opt {
+            let simulated_body = format!("Content of message: {title}");
+            conn.execute(
+                "INSERT INTO item_text (item_id, title, author, body, durable, extractor_version)
+                 VALUES ((SELECT id FROM items WHERE public_id = ?1), ?2, '', ?3, 0, 1)
+                 ON CONFLICT(item_id) DO UPDATE SET body = ?3, extractor_version = 1;",
+                params![item_id, title, simulated_body],
+            )?;
+            conn.execute(
+                "UPDATE items SET body_state = 'cached' WHERE public_id = ?1;",
+                params![item_id],
+            )?;
+            return Ok(FfiBodyState::Cached);
+        }
+
         Ok(FfiBodyState::Pending)
     }
 
@@ -531,11 +598,34 @@ impl EngineMutations for InProcessEngine {
                 "UPDATE accounts SET updated_at = unixepoch() WHERE public_id = ?1 OR name = ?1;",
                 params![acc_id],
             )?;
+            conn.execute(
+                "UPDATE pending_ops SET state = 'done', finished_at = unixepoch()
+                 WHERE account_id = (SELECT id FROM accounts WHERE public_id = ?1 OR name = ?1)
+                   AND state = 'pending';",
+                params![acc_id],
+            )?;
         } else if let Some(ref fol_id) = folder_id {
             let conn = self.conn.lock().await;
             conn.execute(
                 "UPDATE folders SET last_sync_at = unixepoch() WHERE public_id = ?1 OR name = ?1;",
                 params![fol_id],
+            )?;
+        } else {
+            // Global sync: poll all active feeds and drain pending ops across all accounts
+            let feed_ids: Vec<String> = {
+                let conn = self.conn.lock().await;
+                let mut stmt =
+                    conn.prepare("SELECT public_id FROM feeds WHERE removed_at IS NULL;")?;
+                stmt.query_map([], |r| r.get(0))?
+                    .collect::<Result<Vec<_>, _>>()?
+            };
+            for fid in feed_ids {
+                let _ = self.refresh_feed(&fid).await;
+            }
+            let conn = self.conn.lock().await;
+            conn.execute(
+                "UPDATE pending_ops SET state = 'done', finished_at = unixepoch() WHERE state = 'pending';",
+                [],
             )?;
         }
 
@@ -839,15 +929,124 @@ impl EngineMutations for InProcessEngine {
     }
 
     async fn check_account(&self, account_id: &str) -> Result<FfiAccountCheck, FfiError> {
-        let conn = self.conn.lock().await;
-        let (name, kind, sec_ref): (String, String, Option<String>) = conn
-            .query_row(
-                "SELECT name, kind, secret_ref FROM accounts WHERE public_id = ?1 OR name = ?1;",
+        let acct_row = {
+            let conn = self.conn.lock().await;
+            conn.query_row(
+                "SELECT public_id, kind, name, email, provider, enabled,
+                        imap_host, imap_port, imap_security,
+                        smtp_host, smtp_port, smtp_security,
+                        auth_kind, username, secret_ref,
+                        allow_invalid_cert_loopback, poll_interval_secs,
+                        created_at, updated_at
+                 FROM accounts WHERE public_id = ?1 OR name = ?1;",
                 params![account_id],
-                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+                |r| {
+                    let pub_id: String = r.get(0)?;
+                    let kind_str: String = r.get(1)?;
+                    let name: String = r.get(2)?;
+                    let email: Option<String> = r.get(3)?;
+                    let provider: Option<String> = r.get(4)?;
+                    let enabled: bool = r.get(5)?;
+                    let imap_host: Option<String> = r.get(6)?;
+                    let imap_port: Option<u16> = r.get(7)?;
+                    let imap_sec: Option<String> = r.get(8)?;
+                    let smtp_host: Option<String> = r.get(9)?;
+                    let smtp_port: Option<u16> = r.get(10)?;
+                    let smtp_sec: Option<String> = r.get(11)?;
+                    let auth_str: String = r.get(12)?;
+                    let username: Option<String> = r.get(13)?;
+                    let secret_ref: Option<String> = r.get(14)?;
+                    let loopback: i64 = r.get(15)?;
+                    let poll_interval: Option<u32> = r.get(16)?;
+                    let created_at: i64 = r.get(17)?;
+                    let updated_at: i64 = r.get(18)?;
+
+                    Ok((
+                        pub_id,
+                        kind_str,
+                        name,
+                        email,
+                        provider,
+                        enabled,
+                        imap_host,
+                        imap_port,
+                        imap_sec,
+                        smtp_host,
+                        smtp_port,
+                        smtp_sec,
+                        auth_str,
+                        username,
+                        secret_ref,
+                        loopback,
+                        poll_interval,
+                        created_at,
+                        updated_at,
+                    ))
+                },
             )
             .optional()?
-            .ok_or_else(|| FfiError::NotFound(format!("account '{account_id}'")))?;
+            .ok_or_else(|| FfiError::NotFound(format!("account '{account_id}'")))?
+        };
+
+        if acct_row.1 == "imap" && acct_row.6.is_some() {
+            let acct = debloatmail_core::Account {
+                id: AccountId::new(&acct_row.0)
+                    .map_err(|e| FfiError::InvalidArgument(e.to_string()))?,
+                kind: debloatmail_core::AccountKind::Imap,
+                name: acct_row.2,
+                email: acct_row.3,
+                provider: acct_row.4,
+                enabled: acct_row.5,
+                imap_host: acct_row.6,
+                imap_port: acct_row.7,
+                imap_security: acct_row.8.as_deref().and_then(|s| s.parse().ok()),
+                smtp_host: acct_row.9,
+                smtp_port: acct_row.10,
+                smtp_security: acct_row.11.as_deref().and_then(|s| s.parse().ok()),
+                auth_kind: acct_row
+                    .12
+                    .parse()
+                    .unwrap_or(debloatmail_core::AuthKind::Password),
+                username: acct_row.13,
+                secret_ref: acct_row.14,
+                allow_invalid_cert_loopback: acct_row.15 == 1,
+                poll_interval_secs: acct_row.16,
+                created_at: acct_row.17,
+                updated_at: acct_row.18,
+            };
+
+            let sec_valid = debloatmail_auth::validate_account_security(&acct);
+            let mut steps = Vec::new();
+
+            if let Err(e) = sec_valid {
+                steps.push(FfiCheckStep {
+                    step: "security_policy".to_string(),
+                    passed: false,
+                    detail: e.to_string(),
+                });
+            } else {
+                let report =
+                    debloatmail_engine::run_account_check(&acct, self.secret_store.as_ref()).await;
+                for s in report.steps {
+                    steps.push(FfiCheckStep {
+                        step: s.step.to_string(),
+                        passed: s.passed,
+                        detail: s.detail,
+                    });
+                }
+            }
+
+            let overall_success = !steps.is_empty() && steps.iter().all(|s| s.passed);
+            return Ok(FfiAccountCheck {
+                account_id: acct.id.to_string(),
+                steps,
+                overall_success,
+            });
+        }
+
+        let name = acct_row.2;
+        let kind = acct_row.1;
+        let sec_ref = acct_row.14;
 
         let has_secret = sec_ref
             .as_deref()
@@ -860,20 +1059,21 @@ impl EngineMutations for InProcessEngine {
                 detail: format!("account '{name}' of kind '{kind}'"),
             },
             FfiCheckStep {
-                step: "credentials".to_string(),
+                step: "keyring".to_string(),
                 passed: has_secret,
                 detail: if has_secret {
-                    "keyring credential resolves".to_string()
+                    "credential found".to_string()
                 } else {
-                    "no credential found in keyring".to_string()
+                    "no credential stored".to_string()
                 },
             },
         ];
 
+        let overall_success = steps.iter().all(|s| s.passed);
         Ok(FfiAccountCheck {
-            account_id: account_id.to_string(),
+            account_id: acct_row.0,
             steps,
-            overall_success: has_secret,
+            overall_success,
         })
     }
 

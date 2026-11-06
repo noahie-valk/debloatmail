@@ -103,7 +103,10 @@ pub async fn run_account_check(
 
     // Step 2: Keyring secret lookup
     let t_keyring = Instant::now();
-    let password = match secret_store.get_secret(&account.id) {
+    let password = match secret_store
+        .get_secret(&secret_ref_label)
+        .or_else(|_| secret_store.get_secret(&account.id))
+    {
         Ok(secret) => {
             report.steps.push(CheckStepReport {
                 step: "keyring",
