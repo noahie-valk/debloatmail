@@ -1,8 +1,8 @@
 # Implementation Progress
 
-## Current Status: Phase 3D Complete (Golden CLI Tests & Week-One Validation Spike)
+## Current Status: Phase 3D Complete (Golden CLI Tests & Validation Spike)
 
-Phase 1 (`core` + `store`), **Phase 2A (`crates/extract` + MIME fixtures & determinism)**, **Phase 2B (`crates/feeds`)**, **Phase 2C (`crates/auth` + `crates/engine`)**, **Phase 2D (`crates/sync` + `store` blob/thread/header helpers + `feeds` SSRF redirect hook)**, **Phase 3A (`crates/ffi` Qt-free engine trait, standalone flock, `InProcessEngine`, `DbusEngine`, and dual-transport parity)**, **Phase 3B (`crates/cli` `debloatmailctl` read/search engine)**, **Phase 3C (`crates/cli` mutations, RFC 5322 compose, accounts, feeds, sync, daemon control, and doctor diagnostics)**, and **Phase 3D (Golden CLI snapshot suite, contractual exit code error matrix, and the Week-One Validation Spike)** are complete. Workspace dependencies and toolchains are pinned to Rust 1.99.1 (Edition 2024), `clap 4.5.64`, `mail-parser 1.0.0`, `rusqlite 0.41.1`, and `zbus 5.19.0`. All 174 workspace tests pass, `cargo clippy` runs with zero warnings across all targets, `cargo deny` passes advisories/bans/licenses/sources, and `scripts/check-invariants.sh` exits cleanly with code 0.
+Phase 1 (`core` + `store`), **Phase 2A (`crates/extract` + MIME fixtures & determinism)**, **Phase 2B (`crates/feeds`)**, **Phase 2C (`crates/auth` + `crates/engine`)**, **Phase 2D (`crates/sync` + `store` blob/thread/header helpers + `feeds` SSRF redirect hook)**, **Phase 3A (`crates/ffi` Qt-free engine trait, standalone flock, `InProcessEngine`, `DbusEngine`, and dual-transport parity)**, **Phase 3B (`crates/cli` `debloatmailctl` read/search engine)**, **Phase 3C (`crates/cli` mutations, RFC 5322 compose, accounts, feeds, sync, daemon control, and doctor diagnostics)**, and **Phase 3D (Golden CLI snapshot suite, contractual exit code error matrix, and the Validation Spike)** are complete. Workspace dependencies and toolchains are pinned to Rust 1.99.1 (Edition 2024), `clap 4.5.64`, `mail-parser 1.0.0`, `rusqlite 0.41.1`, and `zbus 5.19.0`. All 174 workspace tests pass, `cargo clippy` runs with zero warnings across all targets, `cargo deny` passes advisories/bans/licenses/sources, and `scripts/check-invariants.sh` exits cleanly with code 0.
 
 ---
 
@@ -256,7 +256,7 @@ Phase 1 (`core` + `store`), **Phase 2A (`crates/extract` + MIME fixtures & deter
     - `cli_daemon_doctor_tests.rs`: Daemon status stopped exit code 0 parity and doctor diagnostic test suite.
   - 14 integration tests passing in `crates/cli`.
 
-#### H. Phase 3D: Golden CLI Tests, Contractual Error Matrix, and Week-One Validation Spike
+#### H. Phase 3D: Golden CLI Tests, Contractual Error Matrix, and Validation Spike
 - **Golden JSON CLI Snapshot Suite (`crates/cli/tests/cli_golden_tests.rs`)**:
   - Implemented deterministic test database seeding with fixed timestamps (`FIXED_NOW = 1700000000`) and RFC 3339 date handling.
   - Built snapshot comparison harness comparing parsed `serde_json::Value` structures against 11 golden fixtures in `crates/cli/tests/fixtures/golden/`:
@@ -282,7 +282,7 @@ Phase 1 (`core` + `store`), **Phase 2A (`crates/extract` + MIME fixtures & deter
     - Exit 7: Offline mode requested with uncached data (`--offline read <uncached_id>`).
     - Exit 8: Standalone lock contention: verifies holding PID detection, error messaging, and refusal to open SQLite concurrently (`debloatmail-standalone.lock`).
     - Exit 9: Ambiguous short ID prefix matching multiple items (`read 018f`).
-- **Week-One Validation Spike Scenario (`crates/cli/tests/week_one_spike_tests.rs`)**:
+- **Validation Spike Scenario (`crates/cli/tests/spike_tests.rs`)**:
   - Implemented the complete 9-step contractual spike sequence (`docs/debloatmailctl.md` §11 & `docs/architecture.md` §15) verifying all hard engine paths end-to-end against local loopback mock IMAP, mock SMTP, and mock HTTP RSS servers:
     1. Account add (`account add --kind imap --name fastmail --provider fastmail --secret-command ...`).
     2. Account check (`account check fastmail`: validates `keyring`, `imap_auth`, `imap_mailbox`, `smtp_auth`).

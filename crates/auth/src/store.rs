@@ -55,6 +55,57 @@ impl KeyringStore {
     }
 }
 
+fn fallback_keyring_path() -> Option<std::path::PathBuf> {
+    for var in ["XDG_DATA_HOME", "XDG_STATE_HOME", "XDG_CONFIG_HOME"] {
+        if let Some(dir) = std::env::var(var).ok().filter(|d| !d.is_empty()) {
+            return Some(
+                std::path::PathBuf::from(dir)
+                    .join("debloatmail")
+                    .join(".keyring-fallback"),
+            );
+        }
+    }
+    Some(std::env::temp_dir().join("debloatmail-keyring-fallback"))
+}
+
+fn fallback_read_secrets() -> HashMap<String, String> {
+    let mut map = HashMap::new();
+    let Some(path) = fallback_keyring_path() else {
+        return map;
+    };
+    if let Ok(content) = std::fs::read_to_string(&path) {
+        for line in content.lines() {
+            if let Some((k, v)) = line.split_once('\t') {
+                map.insert(k.to_string(), v.to_string());
+            }
+        }
+    }
+    map
+}
+
+fn fallback_write_secrets(map: &HashMap<String, String>) -> Result<(), AuthError> {
+    let Some(path) = fallback_keyring_path() else {
+        return Ok(());
+    };
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    let mut buf = String::new();
+    for (k, v) in map {
+        buf.push_str(k);
+        buf.push('\t');
+        buf.push_str(v);
+        buf.push('\n');
+    }
+    std::fs::write(&path, buf).map_err(|e| AuthError::KeyringFailure(e.to_string()))?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600));
+    }
+    Ok(())
+}
+
 impl SecretStore for KeyringStore {
     fn set_secret(&self, secret_ref: &str, secret: &SecretString) -> Result<(), AuthError> {
         if secret_ref.trim().is_empty() {
@@ -62,11 +113,17 @@ impl SecretStore for KeyringStore {
                 "secret_ref cannot be empty".to_string(),
             ));
         }
-        let entry = keyring::Entry::new(SERVICE_NAME, secret_ref)
-            .map_err(|e| Self::map_keyring_err(secret_ref, e))?;
-        entry
-            .set_password(secret.expose_secret())
-            .map_err(|e| Self::map_keyring_err(secret_ref, e))
+        match keyring::Entry::new(SERVICE_NAME, secret_ref) {
+            Ok(entry) => entry
+                .set_password(secret.expose_secret())
+                .map_err(|e| Self::map_keyring_err(secret_ref, e)),
+            Err(keyring::Error::NoDefaultStore) | Err(keyring::Error::NoStorageAccess(_)) => {
+                let mut map = fallback_read_secrets();
+                map.insert(secret_ref.to_string(), secret.expose_secret().to_string());
+                fallback_write_secrets(&map)
+            }
+            Err(e) => Err(Self::map_keyring_err(secret_ref, e)),
+        }
     }
 
     fn get_secret(&self, secret_ref: &str) -> Result<SecretString, AuthError> {
@@ -75,12 +132,21 @@ impl SecretStore for KeyringStore {
                 "secret_ref cannot be empty".to_string(),
             ));
         }
-        let entry = keyring::Entry::new(SERVICE_NAME, secret_ref)
-            .map_err(|e| Self::map_keyring_err(secret_ref, e))?;
-        let raw = entry
-            .get_password()
-            .map_err(|e| Self::map_keyring_err(secret_ref, e))?;
-        Ok(SecretString::from(raw))
+        match keyring::Entry::new(SERVICE_NAME, secret_ref) {
+            Ok(entry) => {
+                let raw = entry
+                    .get_password()
+                    .map_err(|e| Self::map_keyring_err(secret_ref, e))?;
+                Ok(SecretString::from(raw))
+            }
+            Err(keyring::Error::NoDefaultStore) | Err(keyring::Error::NoStorageAccess(_)) => {
+                let map = fallback_read_secrets();
+                map.get(secret_ref)
+                    .map(|s| SecretString::from(s.clone()))
+                    .ok_or_else(|| AuthError::SecretNotFound(secret_ref.to_string()))
+            }
+            Err(e) => Err(Self::map_keyring_err(secret_ref, e)),
+        }
     }
 
     fn delete_secret(&self, secret_ref: &str) -> Result<(), AuthError> {
@@ -89,10 +155,16 @@ impl SecretStore for KeyringStore {
                 "secret_ref cannot be empty".to_string(),
             ));
         }
-        let entry = keyring::Entry::new(SERVICE_NAME, secret_ref)
-            .map_err(|e| Self::map_keyring_err(secret_ref, e))?;
-        match entry.delete_credential() {
-            Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
+        match keyring::Entry::new(SERVICE_NAME, secret_ref) {
+            Ok(entry) => match entry.delete_credential() {
+                Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
+                Err(e) => Err(Self::map_keyring_err(secret_ref, e)),
+            },
+            Err(keyring::Error::NoDefaultStore) | Err(keyring::Error::NoStorageAccess(_)) => {
+                let mut map = fallback_read_secrets();
+                map.remove(secret_ref);
+                fallback_write_secrets(&map)
+            }
             Err(e) => Err(Self::map_keyring_err(secret_ref, e)),
         }
     }
@@ -100,7 +172,13 @@ impl SecretStore for KeyringStore {
     fn check_status(&self) -> Result<(), AuthError> {
         match keyring::Entry::store_status() {
             Ok(()) => Ok(()),
-            Err(e) => Err(AuthError::KeyringUnavailable(e.to_string())),
+            Err(e) => {
+                if fallback_keyring_path().is_some() {
+                    Ok(())
+                } else {
+                    Err(AuthError::KeyringUnavailable(e.to_string()))
+                }
+            }
         }
     }
 }

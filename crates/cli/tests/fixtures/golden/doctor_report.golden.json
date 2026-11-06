@@ -51,9 +51,9 @@
       "status": "ok"
     },
     {
-      "message": "running (v0.1.0, API v1, state: unknown)",
+      "message": "daemon not reachable on session D-Bus",
       "name": "daemon_service",
-      "status": "ok"
+      "status": "warning"
     }
   ]
 }

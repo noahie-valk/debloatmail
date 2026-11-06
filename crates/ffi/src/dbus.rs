@@ -162,9 +162,11 @@ pub struct DbusEngine {
 impl DbusEngine {
     /// Connects to the user's D-Bus session bus and opens a read-only SQLite connection.
     pub async fn connect(db_path: &Path, blobs_dir: PathBuf) -> Result<Self, FfiError> {
-        let dbus = zbus::Connection::session()
-            .await
-            .map_err(|e| FfiError::DaemonUnavailable(format!("session bus connect failed: {e}")))?;
+        let dbus = zbus::Connection::session().await.map_err(|e| {
+            FfiError::DaemonUnavailable(format!(
+                "session bus connect failed for org.noahie.debloatmail.Daemon: {e}"
+            ))
+        })?;
 
         let flags = rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY
             | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX
@@ -660,10 +662,7 @@ impl EngineMutations for DbusEngine {
     async fn get_daemon_status(&self) -> Result<FfiDaemonStatus, FfiError> {
         let proxy = StatusProxy::new(&self.dbus).await.map_err(map_dbus_error)?;
 
-        let state = proxy
-            .state()
-            .await
-            .unwrap_or_else(|_| "unknown".to_string());
+        let state = proxy.state().await.map_err(map_dbus_error)?;
         let api_version = proxy
             .api_version()
             .await

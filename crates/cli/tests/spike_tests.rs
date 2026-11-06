@@ -214,7 +214,7 @@ fn isolated_cmd(db_path: &Path, tmp_dir: &Path) -> Command {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn test_week_one_validation_spike_scenario() {
+async fn test_validation_spike_scenario() {
     let (imap_port, _imap_srv) = start_mock_imap().await;
     let (smtp_port, _smtp_srv) = start_mock_smtp().await;
     let (feed_port, _feed_srv) = start_mock_feed_server().await;
