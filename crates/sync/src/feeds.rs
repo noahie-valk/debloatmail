@@ -12,14 +12,17 @@ use debloatmail_engine::{Clock, Rng, feed_poll_backoff};
 use debloatmail_extract::structure::{derive_excerpt, derive_title};
 use debloatmail_extract::{CURRENT_EXTRACTOR_VERSION, extract_feed_text};
 use debloatmail_feeds::{
-    DEFAULT_FEED_TIMEOUT, FetchError, FetchResult, ParsedEntry, ParsedFeed,
-    fetch_feed_with_timeout, parse_feed_document,
+    FetchError, FetchResult, ParsedEntry, ParsedFeed, PollError, fetch_feed_with_timeout,
+    parse_feed_document,
 };
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
 
 use crate::SyncError;
 use crate::id::mint_uuid_v7_from_clock;
 use crate::scheduler::{SyncEvent, effective_feed_interval_secs};
+
+/// Default HTTP timeout for scheduled feed polling (`SYNC.md` §7.1).
+pub const DEFAULT_FEED_POLL_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// Synchronous validation budget for `Feeds.Add` (`SYNC.md` §7.4).
 pub const FEED_ADD_VALIDATION_TIMEOUT: Duration = Duration::from_secs(15);
@@ -198,25 +201,26 @@ pub async fn poll_feed_with_fetcher(
     rng: &mut dyn Rng,
 ) -> Result<FeedPollReport, SyncError> {
     let feed = load_feed_row(conn, feed_row_id)?;
-    let effective_interval = effective_feed_interval_secs(
-        feed.interval_secs,
-        account_poll_interval_secs,
-        global_feed_interval_secs,
+    let (effective_interval_u64, _) = effective_feed_interval_secs(
+        feed.interval_secs.map(i64::from),
+        account_poll_interval_secs.map(i64::from),
+        Some(u64::from(global_feed_interval_secs)),
     );
+    let effective_interval = effective_interval_u64.min(u64::from(u32::MAX)) as u32;
 
     let fetch_res = fetcher
         .fetch(
             &feed.url,
             feed.etag.as_deref(),
             feed.last_modified.as_deref(),
-            DEFAULT_FEED_TIMEOUT,
+            DEFAULT_FEED_POLL_TIMEOUT,
         )
         .await;
 
     let now = clock.now_secs();
 
     match fetch_res {
-        Ok(FetchResult::NotModified) => {
+        Ok(res) if res.status == 304 => {
             let next_fetch_at = compute_next_success_fetch_at(now, effective_interval, rng);
             conn.execute(
                 "UPDATE feeds
@@ -241,14 +245,8 @@ pub async fn poll_feed_with_fetcher(
                 event: None,
             })
         }
-        Ok(FetchResult::Fetched {
-            bytes,
-            etag,
-            last_modified,
-            permanent_redirect_url,
-            ..
-        }) => {
-            let parsed = match parse_feed_document(&bytes) {
+        Ok(res) => {
+            let parsed = match parse_feed_document(&res.body) {
                 Ok(p) => p,
                 Err(parse_err) => {
                     return record_feed_poll_failure(
@@ -263,7 +261,8 @@ pub async fn poll_feed_with_fetcher(
             };
 
             let next_fetch_at = compute_next_success_fetch_at(now, effective_interval, rng);
-            let final_url = permanent_redirect_url
+            let final_url = res
+                .permanent_redirect_url
                 .as_deref()
                 .unwrap_or(&feed.url)
                 .to_string();
@@ -280,8 +279,8 @@ pub async fn poll_feed_with_fetcher(
                 rng,
             )?;
 
-            let new_etag = etag.or(feed.etag);
-            let new_last_mod = last_modified.or(feed.last_modified);
+            let new_etag = res.etag.or(feed.etag);
+            let new_last_mod = res.last_modified.or(feed.last_modified);
 
             tx.execute(
                 "UPDATE feeds
@@ -312,7 +311,7 @@ pub async fn poll_feed_with_fetcher(
             let event = if inserted_count > 0 {
                 Some(SyncEvent::FeedsUpdated {
                     feed_id: feed.public_id.clone(),
-                    new_count: inserted_count as u32,
+                    inserted_count,
                 })
             } else {
                 None
@@ -323,7 +322,7 @@ pub async fn poll_feed_with_fetcher(
                 not_modified: false,
                 inserted_count,
                 updated_count,
-                permanent_redirect_url,
+                permanent_redirect_url: res.permanent_redirect_url,
                 next_fetch_at,
                 error: None,
                 event,
@@ -336,14 +335,7 @@ pub async fn poll_feed_with_fetcher(
                 } => *retry_after_secs,
                 _ => None,
             };
-            record_feed_poll_failure(
-                conn,
-                &feed,
-                &fetch_err.to_string(),
-                retry_after,
-                now,
-                rng,
-            )
+            record_feed_poll_failure(conn, &feed, &fetch_err.to_string(), retry_after, now, rng)
         }
     }
 }
@@ -393,13 +385,7 @@ fn record_feed_poll_failure(
     })
 }
 
-/// Implements `Feeds.Add` hybrid 15-second validation (`SYNC.md` §7.4, `DATA-MODEL.md` §11.3):
-/// - **Fast path (< 15s, valid XML)**: inserts validated `feeds` row (`last_fetch_at = now`),
-///   upserts entries, and returns `validated: true`.
-/// - **Hard failure (`404`/`410`, HTML, malformed XML, rejected redirect)**: creates **no row**
-///   and returns `Err(SyncError::HardFeedFailure { .. })`.
-/// - **Timeout (`15s` budget exceeded)**: inserts transient `feeds` row (`last_fetch_at = NULL`),
-///   schedules `next_fetch_at = now + effective_interval + jitter`, and returns `validated: false`.
+/// Implements `Feeds.Add` hybrid 15-second validation (`SYNC.md` §7.4, `DATA-MODEL.md` §11.3).
 #[allow(clippy::too_many_arguments)]
 pub async fn add_feed_hybrid(
     conn: &mut Connection,
@@ -413,11 +399,12 @@ pub async fn add_feed_hybrid(
     clock: &dyn Clock,
     rng: &mut dyn Rng,
 ) -> Result<AddFeedOutcome, SyncError> {
-    let effective_interval = effective_feed_interval_secs(
-        interval_secs,
-        account_poll_interval_secs,
-        global_feed_interval_secs,
+    let (effective_interval_u64, _) = effective_feed_interval_secs(
+        interval_secs.map(i64::from),
+        account_poll_interval_secs.map(i64::from),
+        Some(u64::from(global_feed_interval_secs)),
     );
+    let effective_interval = effective_interval_u64.min(u64::from(u32::MAX)) as u32;
 
     let fetch_res = fetcher
         .fetch(url, None, None, FEED_ADD_VALIDATION_TIMEOUT)
@@ -425,21 +412,20 @@ pub async fn add_feed_hybrid(
     let now = clock.now_secs();
 
     match fetch_res {
-        Ok(FetchResult::Fetched {
-            bytes,
-            etag,
-            last_modified,
-            permanent_redirect_url,
-            ..
-        }) => {
-            let parsed = parse_feed_document(&bytes).map_err(|e| SyncError::HardFeedFailure {
-                kind: classify_parse_error(&bytes),
-                message: e.to_string(),
-            })?;
+        Ok(res) if res.status == 304 => Err(SyncError::HardFeedFailure {
+            kind: FeedHardFailureKind::Malformed,
+            message: "unexpected 304 Not Modified on unconditional initial feed fetch".to_string(),
+        }),
+        Ok(res) => {
+            let parsed =
+                parse_feed_document(&res.body).map_err(|e| SyncError::HardFeedFailure {
+                    kind: classify_parse_error(&res.body),
+                    message: e.to_string(),
+                })?;
 
             let public_id = mint_uuid_v7_from_clock(clock, rng);
             let feed_id = FeedId(public_id.clone());
-            let final_url = permanent_redirect_url.as_deref().unwrap_or(url);
+            let final_url = res.permanent_redirect_url.as_deref().unwrap_or(url);
             let title = given_name
                 .map(str::to_string)
                 .or_else(|| parsed.title.clone());
@@ -458,8 +444,8 @@ pub async fn add_feed_hybrid(
                     final_url,
                     title,
                     parsed.site_url,
-                    etag,
-                    last_modified,
+                    res.etag,
+                    res.last_modified,
                     interval_secs.map(i64::from),
                     now,
                     next_fetch_at,
@@ -487,11 +473,7 @@ pub async fn add_feed_hybrid(
                 inserted_items,
             })
         }
-        Ok(FetchResult::NotModified) => Err(SyncError::HardFeedFailure {
-            kind: FeedHardFailureKind::Malformed,
-            message: "unexpected 304 Not Modified on unconditional initial feed fetch".to_string(),
-        }),
-        Err(FetchError::TimedOut) => {
+        Err(err) if err.is_timeout() => {
             // SYNC.md §7.4: Timeout is not a verdict -> insert transient row with last_fetch_at = NULL
             let public_id = mint_uuid_v7_from_clock(clock, rng);
             let feed_id = FeedId(public_id.clone());
@@ -528,17 +510,14 @@ pub async fn add_feed_hybrid(
                     message: err.to_string(),
                 })
             } else {
-                Err(SyncError::Feeds(debloatmail_feeds::FeedError::Fetch(err)))
+                Err(SyncError::Feeds(PollError::Fetch(err)))
             }
         }
     }
 }
 
 /// Completes the background continuation of a `validated: false` (`last_fetch_at IS NULL`) feed
-/// (`SYNC.md` §7.4):
-/// - Valid XML -> fills `title`, `site_url`, `etag`, `last_modified`, `last_fetch_at = now`.
-/// - Hard failure -> deletes the transient `feeds` row and any items.
-/// - Another timeout / transient network error -> leaves the row on the normal `§7.3` poll schedule.
+/// (`SYNC.md` §7.4).
 pub async fn complete_pending_feed_validation(
     conn: &mut Connection,
     fetcher: &dyn FeedFetcher,
@@ -552,15 +531,18 @@ pub async fn complete_pending_feed_validation(
     let now = clock.now_secs();
 
     match fetch_res {
-        Ok(FetchResult::Fetched {
-            bytes,
-            etag,
-            last_modified,
-            permanent_redirect_url,
-            ..
-        }) => match parse_feed_document(&bytes) {
+        Ok(res) if res.status == 304 => {
+            hard_delete_feed_row(conn, feed.id)?;
+            Ok(PendingValidationOutcome::DeletedHardFailure {
+                feed_id: feed.public_id,
+                kind: FeedHardFailureKind::Malformed,
+                message: "unexpected 304 Not Modified on unvalidated feed".to_string(),
+            })
+        }
+        Ok(res) => match parse_feed_document(&res.body) {
             Ok(parsed) => {
-                let final_url = permanent_redirect_url
+                let final_url = res
+                    .permanent_redirect_url
                     .as_deref()
                     .unwrap_or(&feed.url)
                     .to_string();
@@ -589,8 +571,8 @@ pub async fn complete_pending_feed_validation(
                         final_url,
                         parsed.title,
                         parsed.site_url,
-                        etag,
-                        last_modified,
+                        res.etag,
+                        res.last_modified,
                         now,
                         feed.id,
                     ],
@@ -603,7 +585,7 @@ pub async fn complete_pending_feed_validation(
                 })
             }
             Err(parse_err) => {
-                let kind = classify_parse_error(&bytes);
+                let kind = classify_parse_error(&res.body);
                 hard_delete_feed_row(conn, feed.id)?;
                 Ok(PendingValidationOutcome::DeletedHardFailure {
                     feed_id: feed.public_id,
@@ -612,15 +594,7 @@ pub async fn complete_pending_feed_validation(
                 })
             }
         },
-        Ok(FetchResult::NotModified) => {
-            hard_delete_feed_row(conn, feed.id)?;
-            Ok(PendingValidationOutcome::DeletedHardFailure {
-                feed_id: feed.public_id,
-                kind: FeedHardFailureKind::Malformed,
-                message: "unexpected 304 Not Modified on unvalidated feed".to_string(),
-            })
-        }
-        Err(FetchError::TimedOut) => Ok(PendingValidationOutcome::DeferredToSchedule {
+        Err(err) if err.is_timeout() => Ok(PendingValidationOutcome::DeferredToSchedule {
             feed_id: feed.public_id,
         }),
         Err(err) => {
@@ -654,10 +628,12 @@ fn hard_delete_feed_row(conn: &mut Connection, feed_row_id: i64) -> Result<(), S
 fn classify_fetch_hard_failure(err: &FetchError) -> Option<FeedHardFailureKind> {
     match err {
         FetchError::Gone(_) => Some(FeedHardFailureKind::Gone),
-        FetchError::InvalidContentType(_) => Some(FeedHardFailureKind::NotAFeed),
-        FetchError::Redirect(_) => Some(FeedHardFailureKind::RedirectRejected),
-        FetchError::TooLarge { .. } => Some(FeedHardFailureKind::Malformed),
-        FetchError::HttpStatus(code) if (400..500).contains(code) && *code != 429 => {
+        FetchError::HtmlContent => Some(FeedHardFailureKind::NotAFeed),
+        FetchError::RedirectRejected(_) | FetchError::TooManyRedirects => {
+            Some(FeedHardFailureKind::RedirectRejected)
+        }
+        FetchError::BodyTooLarge => Some(FeedHardFailureKind::Malformed),
+        FetchError::UnexpectedStatus(code) if (400..500).contains(code) && *code != 429 => {
             Some(FeedHardFailureKind::Gone)
         }
         _ => None,
@@ -688,15 +664,17 @@ fn compute_next_success_fetch_at(
 
 /// Derives the stable `(feed_id, guid)` key for a [`ParsedEntry`] (`SYNC.md` §7.2):
 /// 1. `<guid>` / `<id>` if non-empty.
-/// 2. `<link>` (`entry.url`) if non-empty.
+/// 2. `<link>` (`entry.link`) if non-empty.
 /// 3. BLAKE3 hex hash of `title + "\n" + content/summary`.
 pub fn derive_entry_guid(entry: &ParsedEntry) -> String {
-    let trimmed_guid = entry.guid.trim();
-    if !trimmed_guid.is_empty() {
-        return trimmed_guid.to_string();
+    if let Some(guid) = &entry.guid {
+        let trimmed_guid = guid.trim();
+        if !trimmed_guid.is_empty() {
+            return trimmed_guid.to_string();
+        }
     }
-    if let Some(url) = &entry.url {
-        let trimmed_url = url.trim();
+    if let Some(link) = &entry.link {
+        let trimmed_url = link.trim();
         if !trimmed_url.is_empty() {
             return trimmed_url.to_string();
         }
@@ -731,11 +709,8 @@ fn upsert_parsed_feed_entries(
 
     for entry in &parsed.entries {
         let guid = derive_entry_guid(entry);
-        let body_text = extract_feed_text(
-            entry.content.as_deref(),
-            entry.summary.as_deref(),
-            site_url,
-        );
+        let body_text =
+            extract_feed_text(entry.content.as_deref(), entry.summary.as_deref(), site_url);
         let title = match entry.title.as_deref() {
             Some(t) if !t.trim().is_empty() => derive_title(Some(t)),
             _ => "Untitled".to_string(),
@@ -766,21 +741,22 @@ fn upsert_parsed_feed_entries(
                 params![title, entry.author, excerpt, published_at, now, item_id],
             )?;
             tx.execute(
-                "UPDATE feed_items SET url = ?1 WHERE item_id = ?2",
-                params![entry.url, item_id],
+                "UPDATE feed_items SET link = ?1, author = ?2 WHERE item_id = ?3",
+                params![entry.link, entry.author, item_id],
             )?;
             tx.execute(
-                "INSERT INTO item_text (item_id, title, author, body, extractor_version)
-                 VALUES (?1, ?2, ?3, ?4, ?5)
+                "INSERT INTO item_text (item_id, title, author, body, durable, extractor_version)
+                 VALUES (?1, ?2, ?3, ?4, 1, ?5)
                  ON CONFLICT(item_id) DO UPDATE SET
                      title = excluded.title,
                      author = excluded.author,
                      body = excluded.body,
+                     durable = 1,
                      extractor_version = excluded.extractor_version",
                 params![
                     item_id,
                     title,
-                    entry.author,
+                    entry.author.as_deref().unwrap_or(""),
                     body_text,
                     i64::from(CURRENT_EXTRACTOR_VERSION),
                 ],
@@ -810,17 +786,17 @@ fn upsert_parsed_feed_entries(
             let item_id = tx.last_insert_rowid();
 
             tx.execute(
-                "INSERT INTO feed_items (item_id, feed_id, guid, url)
-                 VALUES (?1, ?2, ?3, ?4)",
-                params![item_id, feed_row_id, guid, entry.url],
+                "INSERT INTO feed_items (item_id, feed_id, guid, link, author)
+                 VALUES (?1, ?2, ?3, ?4, ?5)",
+                params![item_id, feed_row_id, guid, entry.link, entry.author],
             )?;
             tx.execute(
-                "INSERT INTO item_text (item_id, title, author, body, extractor_version)
-                 VALUES (?1, ?2, ?3, ?4, ?5)",
+                "INSERT INTO item_text (item_id, title, author, body, durable, extractor_version)
+                 VALUES (?1, ?2, ?3, ?4, 1, ?5)",
                 params![
                     item_id,
                     title,
-                    entry.author,
+                    entry.author.as_deref().unwrap_or(""),
                     body_text,
                     i64::from(CURRENT_EXTRACTOR_VERSION),
                 ],
