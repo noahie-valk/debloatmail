@@ -1,6 +1,7 @@
 pub mod args;
 pub mod config;
 pub mod error;
+pub mod format;
 pub mod resolve;
 
 fn main() {
