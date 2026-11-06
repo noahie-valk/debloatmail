@@ -628,6 +628,8 @@ name = "debloatmail-ffi"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "base64 0.22.1",
+ "chrono",
  "debloatmail-auth",
  "debloatmail-core",
  "debloatmail-engine",
@@ -637,6 +639,7 @@ dependencies = [
  "debloatmail-sync",
  "libc",
  "rusqlite",
+ "secrecy",
  "serde",
  "serde_json",
  "tempfile",
