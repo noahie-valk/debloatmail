@@ -63,8 +63,8 @@ pub fn run_startup_recovery(
 
     let mut marked_sends = 0usize;
     for (op_id, payload_str) in in_flight_sends {
-        let mut val: serde_json::Value = serde_json::from_str(&payload_str)
-            .unwrap_or_else(|_| serde_json::json!({}));
+        let mut val: serde_json::Value =
+            serde_json::from_str(&payload_str).unwrap_or_else(|_| serde_json::json!({}));
         if let Some(obj) = val.as_object_mut() {
             obj.insert(
                 "needs_confirmation".to_string(),

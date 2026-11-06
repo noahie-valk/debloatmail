@@ -38,7 +38,8 @@ pub fn mint_uuid_v7(unix_ms: u64, rng: &mut dyn Rng) -> PublicId {
     bytes[8] = (bytes[8] & 0x3f) | 0x80;
 
     let formatted = format_uuid_bytes(&bytes);
-    PublicId::new(formatted).unwrap_or_else(|_| unreachable!("formatted UUIDv7 is always non-empty"))
+    PublicId::new(formatted)
+        .unwrap_or_else(|_| unreachable!("formatted UUIDv7 is always non-empty"))
 }
 
 /// Generates a canonical RFC 9562 UUIDv7 [`PublicId`] using `clock.now_secs() * 1000`.

@@ -214,9 +214,7 @@ impl Scheduler {
         let active_match = self
             .jobs
             .values()
-            .find(|j| {
-                j.scope == scope && matches!(j.state, JobState::Queued | JobState::Running)
-            })
+            .find(|j| j.scope == scope && matches!(j.state, JobState::Queued | JobState::Running))
             .map(|j| j.id);
 
         if let Some(existing_id) = active_match {
@@ -620,10 +618,7 @@ mod tests {
         let (id2, coalesced2) = sched.enqueue(scope.clone(), PriorityClass::Interactive, 1_100);
         assert!(coalesced2);
         assert_eq!(id1, id2);
-        assert_eq!(
-            sched.get(id1).unwrap().priority,
-            PriorityClass::Interactive
-        );
+        assert_eq!(sched.get(id1).unwrap().priority, PriorityClass::Interactive);
 
         let running = sched.pop_next_runnable().unwrap();
         assert_eq!(running.id, id1);
@@ -662,28 +657,12 @@ mod tests {
         let mut tracker = ProgressTracker::new(JobId(7));
 
         // Initial phase transition always emits
-        assert!(
-            tracker
-                .update(SyncPhase::Fetching, 10, 1_000)
-                .is_some()
-        );
+        assert!(tracker.update(SyncPhase::Fetching, 10, 1_000).is_some());
         // 50 ms later in same phase (< 250 ms) -> throttled
-        assert!(
-            tracker
-                .update(SyncPhase::Fetching, 20, 1_050)
-                .is_none()
-        );
+        assert!(tracker.update(SyncPhase::Fetching, 20, 1_050).is_none());
         // 100% completion within the throttle window is NEVER dropped
-        assert!(
-            tracker
-                .update(SyncPhase::Fetching, 100, 1_100)
-                .is_some()
-        );
+        assert!(tracker.update(SyncPhase::Fetching, 100, 1_100).is_some());
         // Phase transition to Storing immediately emits even at 1_110 ms
-        assert!(
-            tracker
-                .update(SyncPhase::Storing, 0, 1_110)
-                .is_some()
-        );
+        assert!(tracker.update(SyncPhase::Storing, 0, 1_110).is_some());
     }
 }

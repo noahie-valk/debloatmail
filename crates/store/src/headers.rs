@@ -11,7 +11,6 @@ use crate::StoreError;
 use crate::blobs::decrement_blob_ref;
 use crate::schema::bump_revision;
 
-
 /// Input data for recording a mail header during sync.
 pub struct NewMailHeader<'a> {
     pub public_id: &'a str,
@@ -319,9 +318,7 @@ pub fn reconcile_extracted_attachments(
         "SELECT id, section_id, blob_hash FROM attachments WHERE item_id = ?1 ORDER BY id;",
     )?;
     let existing: Vec<(i64, String, Option<String>)> = stmt
-        .query_map(params![item_id], |r| {
-            Ok((r.get(0)?, r.get(1)?, r.get(2)?))
-        })?
+        .query_map(params![item_id], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?
         .collect::<Result<Vec<_>, _>>()?;
 
     for (att_id, section_id, blob_hash) in existing {
@@ -365,7 +362,6 @@ pub fn reconcile_extracted_attachments(
     bump_revision(conn)?;
     Ok(())
 }
-
 
 /// Evict body text for a mail item (empties body, sets body_state = 'none', keeps title/author).
 pub fn evict_mail_body(conn: &Connection, item_id: i64) -> Result<(), StoreError> {

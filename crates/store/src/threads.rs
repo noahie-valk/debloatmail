@@ -122,10 +122,18 @@ where
                 unread: r.get::<_, i64>(3)? != 0,
                 hidden: r.get::<_, bool>(4)?,
                 existing_thread_id: r.get(5)?,
-                message_id: r.get::<_, Option<String>>(6)?.filter(|s| !s.trim().is_empty()),
-                in_reply_to: r.get::<_, Option<String>>(7)?.filter(|s| !s.trim().is_empty()),
-                references_hdr: r.get::<_, Option<String>>(8)?.filter(|s| !s.trim().is_empty()),
-                subject_norm: r.get::<_, Option<String>>(9)?.filter(|s| !s.trim().is_empty()),
+                message_id: r
+                    .get::<_, Option<String>>(6)?
+                    .filter(|s| !s.trim().is_empty()),
+                in_reply_to: r
+                    .get::<_, Option<String>>(7)?
+                    .filter(|s| !s.trim().is_empty()),
+                references_hdr: r
+                    .get::<_, Option<String>>(8)?
+                    .filter(|s| !s.trim().is_empty()),
+                subject_norm: r
+                    .get::<_, Option<String>>(9)?
+                    .filter(|s| !s.trim().is_empty()),
             })
         })?
         .collect::<Result<Vec<_>, _>>()?;

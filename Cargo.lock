@@ -637,6 +637,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "debloatmail-sync"
+version = "0.1.0"
+dependencies = [
+ "blake3",
+ "debloatmail-auth",
+ "debloatmail-core",
+ "debloatmail-engine",
+ "debloatmail-extract",
+ "debloatmail-feeds",
+ "debloatmail-store",
+ "io-imap",
+ "io-smtp",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+]
+
+[[package]]
 name = "digest"
 version = "0.11.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"

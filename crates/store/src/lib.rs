@@ -59,7 +59,6 @@ pub use schema::{
 pub use search::{ParsedSearch, parse_search_query, search_items};
 pub use threads::rebuild_account_threads;
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -319,10 +318,8 @@ mod tests {
     #[test]
     fn test_blob_lifecycle_gc_reconciliation_and_lru_eviction() {
         let conn = setup_test_db();
-        let temp_dir = std::env::temp_dir().join(format!(
-            "debloatmail-blob-test-{}",
-            std::process::id()
-        ));
+        let temp_dir =
+            std::env::temp_dir().join(format!("debloatmail-blob-test-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&temp_dir);
 
         // Insert a mail item
@@ -355,7 +352,8 @@ mod tests {
         let item_id = insert_mail_header(&conn, &mail_header).unwrap();
 
         // Store raw MIME blob and link it to mail_items.raw_blob
-        let raw_bytes = b"From: alice@example.com\r\nSubject: Test\r\n\r\nCached body contents here.";
+        let raw_bytes =
+            b"From: alice@example.com\r\nSubject: Test\r\n\r\nCached body contents here.";
         let hash = put_blob(&conn, &temp_dir, raw_bytes, 10_000).unwrap();
         increment_blob_ref(&conn, &hash, 10_000).unwrap();
         conn.execute(
@@ -484,7 +482,10 @@ mod tests {
             .collect::<Result<Vec<_>, _>>()
             .unwrap();
         assert_eq!(rows.len(), 2);
-        assert_eq!(rows[0], ("3".to_string(), "application/pdf".to_string(), 512, 1));
+        assert_eq!(
+            rows[0],
+            ("3".to_string(), "application/pdf".to_string(), 512, 1)
+        );
         assert_eq!(rows[1], ("4".to_string(), "image/png".to_string(), 2048, 0));
 
         // Insert a reply referencing root-1@example.com
@@ -549,4 +550,3 @@ mod tests {
         assert_eq!(last_activity_after, 1700002000);
     }
 }
-

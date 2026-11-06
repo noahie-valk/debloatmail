@@ -151,8 +151,9 @@ pub fn touch_blob(
 /// Unlinks the on-disk files and deletes the `blobs` rows. Returns the number of blobs collected.
 pub fn gc_blobs(conn: &Connection, cache_dir: &Path, now: Timestamp) -> Result<usize, StoreError> {
     let cutoff = now.saturating_sub(BLOB_GC_GRACE_WINDOW_SECS);
-    let mut stmt = conn
-        .prepare("SELECT hash FROM blobs WHERE refcount <= 0 AND last_used_at < ?1 ORDER BY hash;")?;
+    let mut stmt = conn.prepare(
+        "SELECT hash FROM blobs WHERE refcount <= 0 AND last_used_at < ?1 ORDER BY hash;",
+    )?;
     let hashes: Vec<String> = stmt
         .query_map(params![cutoff], |r| r.get(0))?
         .collect::<Result<Vec<_>, _>>()?;
