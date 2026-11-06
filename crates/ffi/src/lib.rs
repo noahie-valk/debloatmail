@@ -9,6 +9,7 @@ pub mod traits;
 pub mod types;
 
 pub use dbus::DbusEngine;
+pub use debloatmail_auth::{KeyringStore, SecretStore};
 pub use error::FfiError;
 pub use in_process::InProcessEngine;
 pub use lock::StandaloneLock;

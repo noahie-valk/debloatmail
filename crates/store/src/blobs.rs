@@ -49,7 +49,11 @@ pub fn compute_blob_hash(data: &[u8]) -> String {
 pub fn blob_path(cache_dir: &Path, hash: &str) -> Result<PathBuf, StoreError> {
     validate_blob_hash(hash)?;
     let prefix = &hash[0..2];
-    Ok(cache_dir.join("blobs").join(prefix).join(hash))
+    if cache_dir.ends_with("blobs") {
+        Ok(cache_dir.join(prefix).join(hash))
+    } else {
+        Ok(cache_dir.join("blobs").join(prefix).join(hash))
+    }
 }
 
 /// Writes `data` into the content-addressed blob store on disk with mode `0o600`

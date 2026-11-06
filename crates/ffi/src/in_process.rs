@@ -548,7 +548,7 @@ impl EngineMutations for InProcessEngine {
 
         let internal_id: i64 = conn
             .query_row(
-                "SELECT id FROM feeds WHERE public_id = ?1 OR name = ?1;",
+                "SELECT id FROM feeds WHERE public_id = ?1 OR title = ?1;",
                 params![feed_id],
                 |r| r.get(0),
             )
@@ -620,13 +620,13 @@ impl EngineMutations for InProcessEngine {
 
         if let Some(n) = name {
             conn.execute(
-                "UPDATE feeds SET name = ?1, updated_at = unixepoch() WHERE public_id = ?2 OR name = ?2;",
+                "UPDATE feeds SET title = ?1 WHERE public_id = ?2;",
                 params![n, feed_id],
             )?;
         }
         if let Some(secs) = interval_secs {
             conn.execute(
-                "UPDATE feeds SET interval_secs = ?1, updated_at = unixepoch() WHERE public_id = ?2 OR name = ?2;",
+                "UPDATE feeds SET interval_secs = ?1 WHERE public_id = ?2;",
                 params![secs, feed_id],
             )?;
         }
@@ -638,7 +638,7 @@ impl EngineMutations for InProcessEngine {
         let conn = self.conn.lock().await;
         let internal_id: i64 = conn
             .query_row(
-                "SELECT id FROM feeds WHERE public_id = ?1 OR name = ?1;",
+                "SELECT id FROM feeds WHERE public_id = ?1 OR title = ?1;",
                 params![feed_id],
                 |r| r.get(0),
             )
@@ -669,7 +669,41 @@ impl EngineMutations for InProcessEngine {
             .and_then(|v| v.as_str())
             .unwrap_or("imap");
         let email = params.get("email").and_then(|v| v.as_str()).unwrap_or("");
-        let preset = params.get("preset").and_then(|v| v.as_str());
+        let preset = params
+            .get("provider")
+            .or_else(|| params.get("preset"))
+            .and_then(|v| v.as_str());
+
+        let imap_host = params.get("imap_host").and_then(|v| v.as_str());
+        let imap_port = params
+            .get("imap_port")
+            .and_then(|v| v.as_u64())
+            .map(|p| p as u16);
+        let imap_security = params.get("imap_security").and_then(|v| v.as_str());
+        let smtp_host = params.get("smtp_host").and_then(|v| v.as_str());
+        let smtp_port = params
+            .get("smtp_port")
+            .and_then(|v| v.as_u64())
+            .map(|p| p as u16);
+        let smtp_security = params.get("smtp_security").and_then(|v| v.as_str());
+        let auth_kind = params
+            .get("auth_kind")
+            .and_then(|v| v.as_str())
+            .unwrap_or("password");
+        let username = params.get("username").and_then(|v| v.as_str());
+        let allow_loopback = if params
+            .get("allow_invalid_cert_loopback")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false)
+        {
+            1
+        } else {
+            0
+        };
+        let poll_interval = params
+            .get("poll_interval_secs")
+            .and_then(|v| v.as_u64())
+            .map(|i| i as u32);
 
         let pub_id = generate_uuid();
         let acc_id =
@@ -678,9 +712,29 @@ impl EngineMutations for InProcessEngine {
 
         conn.execute(
             "INSERT INTO accounts (
-                public_id, name, kind, email, enabled, provider, secret_ref, created_at, updated_at
-             ) VALUES (?1, ?2, ?3, ?4, 1, ?5, ?6, unixepoch(), unixepoch());",
-            params![pub_id.as_str(), name, kind, email, preset, secret_ref],
+                public_id, name, kind, email, enabled, provider, secret_ref,
+                imap_host, imap_port, imap_security, smtp_host, smtp_port, smtp_security,
+                auth_kind, username, allow_invalid_cert_loopback, poll_interval_secs,
+                created_at, updated_at
+             ) VALUES (?1, ?2, ?3, ?4, 1, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, unixepoch(), unixepoch());",
+            params![
+                pub_id.as_str(),
+                name,
+                kind,
+                email,
+                preset,
+                secret_ref,
+                imap_host,
+                imap_port,
+                imap_security,
+                smtp_host,
+                smtp_port,
+                smtp_security,
+                auth_kind,
+                username,
+                allow_loopback,
+                poll_interval,
+            ],
         )?;
 
         if let Some(password) = params.get("password").and_then(|v| v.as_str()) {
@@ -708,6 +762,42 @@ impl EngineMutations for InProcessEngine {
             conn.execute(
                 "UPDATE accounts SET enabled = ?1, updated_at = unixepoch() WHERE public_id = ?2 OR name = ?2;",
                 params![if enabled { 1 } else { 0 }, account_id],
+            )?;
+        }
+        if let Some(email) = params.get("email").and_then(|v| v.as_str()) {
+            conn.execute(
+                "UPDATE accounts SET email = ?1, updated_at = unixepoch() WHERE public_id = ?2 OR name = ?2;",
+                params![email, account_id],
+            )?;
+        }
+        if let Some(username) = params.get("username").and_then(|v| v.as_str()) {
+            conn.execute(
+                "UPDATE accounts SET username = ?1, updated_at = unixepoch() WHERE public_id = ?2 OR name = ?2;",
+                params![username, account_id],
+            )?;
+        }
+        if let Some(host) = params.get("imap_host").and_then(|v| v.as_str()) {
+            conn.execute(
+                "UPDATE accounts SET imap_host = ?1, updated_at = unixepoch() WHERE public_id = ?2 OR name = ?2;",
+                params![host, account_id],
+            )?;
+        }
+        if let Some(port) = params.get("imap_port").and_then(|v| v.as_u64()) {
+            conn.execute(
+                "UPDATE accounts SET imap_port = ?1, updated_at = unixepoch() WHERE public_id = ?2 OR name = ?2;",
+                params![port as u16, account_id],
+            )?;
+        }
+        if let Some(host) = params.get("smtp_host").and_then(|v| v.as_str()) {
+            conn.execute(
+                "UPDATE accounts SET smtp_host = ?1, updated_at = unixepoch() WHERE public_id = ?2 OR name = ?2;",
+                params![host, account_id],
+            )?;
+        }
+        if let Some(port) = params.get("smtp_port").and_then(|v| v.as_u64()) {
+            conn.execute(
+                "UPDATE accounts SET smtp_port = ?1, updated_at = unixepoch() WHERE public_id = ?2 OR name = ?2;",
+                params![port as u16, account_id],
             )?;
         }
 
@@ -750,7 +840,7 @@ impl EngineMutations for InProcessEngine {
 
     async fn check_account(&self, account_id: &str) -> Result<FfiAccountCheck, FfiError> {
         let conn = self.conn.lock().await;
-        let (name, kind, sec_ref): (String, String, String) = conn
+        let (name, kind, sec_ref): (String, String, Option<String>) = conn
             .query_row(
                 "SELECT name, kind, secret_ref FROM accounts WHERE public_id = ?1 OR name = ?1;",
                 params![account_id],
@@ -759,7 +849,9 @@ impl EngineMutations for InProcessEngine {
             .optional()?
             .ok_or_else(|| FfiError::NotFound(format!("account '{account_id}'")))?;
 
-        let has_secret = self.secret_store.get_secret(&sec_ref).is_ok();
+        let has_secret = sec_ref
+            .as_deref()
+            .is_some_and(|r| self.secret_store.get_secret(r).is_ok());
 
         let steps = vec![
             FfiCheckStep {
