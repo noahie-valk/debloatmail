@@ -5,6 +5,9 @@ edition.workspace = true
 license.workspace = true
 description = "Command-line interface to debloatmail"
 
+[lib]
+path = "src/lib.rs"
+
 [[bin]]
 name = "debloatmailctl"
 path = "src/main.rs"
