@@ -1,17 +1,15 @@
 //! The plaintext `read` command conforming to `docs/debloatmailctl.md` §8 and §10.
 
 use debloatmail_ffi::reader::get_item_fn;
-use debloatmail_ffi::{
-    DbusEngine, Engine, FfiBodyState, FfiItemDetail, FfiItemKind, InProcessEngine,
-};
+use debloatmail_ffi::{FfiBodyState, FfiItemDetail, FfiItemKind};
 use rusqlite::Connection;
 use std::fs;
 use std::io::{self, Write};
-use std::path::Path;
 
 use crate::args::{Cli, ReadArgs};
 use crate::config::AppPaths;
 use crate::error::CliError;
+use crate::executor::init_engine;
 use crate::resolve::resolve_item_id;
 
 pub async fn execute_read(
@@ -98,7 +96,7 @@ async fn read_single_item(
             ));
         }
 
-        let engine = init_engine(cli, &paths.db_path, &paths.blobs_dir, &paths.lock_path).await?;
+        let engine = init_engine(cli, paths).await?;
         engine.fetch_body(public_id).await?;
 
         // Re-read from SQLite
@@ -106,7 +104,7 @@ async fn read_single_item(
     }
 
     if mark_read && !cli.dry_run {
-        let engine = init_engine(cli, &paths.db_path, &paths.blobs_dir, &paths.lock_path).await?;
+        let engine = init_engine(cli, paths).await?;
         let _ = engine.mark_read(&[public_id.to_string()], true).await;
     }
 
@@ -178,23 +176,4 @@ fn print_headers(detail: &FfiItemDetail) {
         println!("Attachments: {}", att_names.join(", "));
     }
     println!();
-}
-
-async fn init_engine(
-    cli: &Cli,
-    db_path: &Path,
-    blobs_dir: &Path,
-    lock_path: &Path,
-) -> Result<Box<dyn Engine>, CliError> {
-    if cli.no_daemon {
-        let in_proc = InProcessEngine::open_standalone(
-            db_path.to_path_buf(),
-            blobs_dir.to_path_buf(),
-            Some(lock_path.to_path_buf()),
-        )?;
-        Ok(Box::new(in_proc))
-    } else {
-        let dbus_eng = DbusEngine::connect(db_path, blobs_dir.to_path_buf()).await?;
-        Ok(Box::new(dbus_eng))
-    }
 }

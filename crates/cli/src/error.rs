@@ -123,6 +123,12 @@ struct JsonErrorBody {
     message: String,
 }
 
+impl From<debloatmail_store::StoreError> for CliError {
+    fn from(err: debloatmail_store::StoreError) -> Self {
+        CliError::Internal(err.to_string())
+    }
+}
+
 impl From<FfiError> for CliError {
     fn from(err: FfiError) -> Self {
         match err {

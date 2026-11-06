@@ -79,6 +79,43 @@ pub fn format_single<T: Serialize + std::fmt::Display>(
     }
 }
 
+pub fn format_mutation_result(
+    action: &str,
+    count: u32,
+    format: OutputFormat,
+) -> Result<(), CliError> {
+    match format {
+        OutputFormat::Human => {
+            println!("{action} {count}");
+            Ok(())
+        }
+        OutputFormat::Json => {
+            let mut map = serde_json::Map::new();
+            map.insert(action.to_string(), serde_json::Value::from(count));
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&serde_json::Value::Object(map))
+                    .map_err(|e| CliError::Internal(e.to_string()))?
+            );
+            Ok(())
+        }
+        OutputFormat::Jsonl => {
+            let mut map = serde_json::Map::new();
+            map.insert(action.to_string(), serde_json::Value::from(count));
+            println!(
+                "{}",
+                serde_json::to_string(&serde_json::Value::Object(map))
+                    .map_err(|e| CliError::Internal(e.to_string()))?
+            );
+            Ok(())
+        }
+        OutputFormat::Plain => {
+            println!("{action}\t{count}");
+            Ok(())
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

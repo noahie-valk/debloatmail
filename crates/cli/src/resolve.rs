@@ -97,7 +97,10 @@ pub fn resolve_account(conn: &Connection, input: &str) -> Result<FfiAccount, Cli
 
     match matches.len() {
         0 => Err(CliError::NotFound(format!("account '{trimmed}' not found"))),
-        1 => Ok(matches.into_iter().next().unwrap()),
+        1 => matches
+            .into_iter()
+            .next()
+            .ok_or_else(|| CliError::NotFound(format!("account '{trimmed}' not found"))),
         _ => Err(CliError::NotFound(format!(
             "account '{trimmed}' is ambiguous"
         ))),
@@ -126,7 +129,10 @@ pub fn resolve_folder(
 
     match matches.len() {
         0 => Err(CliError::NotFound(format!("folder '{trimmed}' not found"))),
-        1 => Ok(matches.into_iter().next().unwrap()),
+        1 => matches
+            .into_iter()
+            .next()
+            .ok_or_else(|| CliError::NotFound(format!("folder '{trimmed}' not found"))),
         _ => Err(CliError::NotFound(format!(
             "folder '{trimmed}' is ambiguous"
         ))),
@@ -156,7 +162,10 @@ pub fn resolve_feed(
 
     match matches.len() {
         0 => Err(CliError::NotFound(format!("feed '{trimmed}' not found"))),
-        1 => Ok(matches.into_iter().next().unwrap()),
+        1 => matches
+            .into_iter()
+            .next()
+            .ok_or_else(|| CliError::NotFound(format!("feed '{trimmed}' not found"))),
         _ => Err(CliError::NotFound(format!("feed '{trimmed}' is ambiguous"))),
     }
 }

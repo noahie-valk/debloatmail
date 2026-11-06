@@ -120,40 +120,40 @@ pub enum Commands {
 
     // --- Stubs for Phase 3C commands ---
     /// Mark items as read, unread, starred, or unstarred.
-    Mark(MarkStubArgs),
+    Mark(MarkArgs),
 
     /// Move mail items to target folder.
-    Move(MoveStubArgs),
+    Move(MoveArgs),
 
     /// Copy mail items to target folder.
-    Copy(CopyStubArgs),
+    Copy(CopyArgs),
 
     /// Delete mail items (moves to trash or expunges).
-    Delete(DeleteStubArgs),
+    Delete(DeleteArgs),
 
     /// Hide feed articles from all streams and search.
-    Hide(HideStubArgs),
+    Hide(HideArgs),
 
     /// Compose and queue a plaintext email.
-    Compose(ComposeStubArgs),
+    Compose(ComposeArgs),
 
     /// Reply to an existing mail item.
-    Reply(ReplyStubArgs),
+    Reply(ReplyArgs),
 
     /// Forward an existing mail item.
-    Forward(ForwardStubArgs),
+    Forward(ForwardArgs),
 
     /// Inspect and download attachments.
-    Attachment(AttachmentStubArgs),
+    Attachment(AttachmentArgs),
 
     /// Trigger synchronization for accounts, folders, or feeds.
-    Sync(SyncStubArgs),
+    Sync(SyncArgs),
 
     /// Background daemon lifecycle and status control.
-    Daemon(DaemonStubArgs),
+    Daemon(DaemonArgs),
 
     /// End-to-end local health and database diagnostics.
-    Doctor(DoctorStubArgs),
+    Doctor(DoctorArgs),
 }
 
 #[derive(Debug, Args, Clone)]
@@ -278,6 +278,8 @@ pub enum FolderCommands {
         name: String,
         #[arg(long)]
         full: bool,
+        #[arg(long)]
+        wait: bool,
     },
 }
 
@@ -344,21 +346,137 @@ pub enum AccountCommands {
     Show { name_or_id: String },
     /// Add a new mail or feed account.
     Add {
+        /// Account kind: 'imap' or 'feed' (default: imap).
         #[arg(long)]
         kind: Option<String>,
+
+        /// Account identifier name (must be unique).
         #[arg(long)]
         name: Option<String>,
+
+        /// Run interactive guided wizard.
+        #[arg(long)]
+        wizard: bool,
+
+        /// User email address.
+        #[arg(long)]
+        email: Option<String>,
+
+        /// Provider preset: 'fastmail', 'proton', or 'generic'.
+        #[arg(long)]
+        provider: Option<String>,
+
+        /// IMAP/SMTP username (if different from email).
+        #[arg(long)]
+        username: Option<String>,
+
+        /// Authentication mechanism kind ('password' or 'oauth2').
+        #[arg(long)]
+        auth_kind: Option<String>,
+
+        /// IMAP server hostname.
+        #[arg(long)]
+        imap_host: Option<String>,
+
+        /// IMAP server port (e.g. 993, 1143, 143).
+        #[arg(long)]
+        imap_port: Option<u16>,
+
+        /// IMAP security ('tls', 'starttls', 'none').
+        #[arg(long)]
+        imap_security: Option<String>,
+
+        /// SMTP server hostname.
+        #[arg(long)]
+        smtp_host: Option<String>,
+
+        /// SMTP server port (e.g. 465, 587, 1025).
+        #[arg(long)]
+        smtp_port: Option<u16>,
+
+        /// SMTP security ('tls', 'starttls', 'none').
+        #[arg(long)]
+        smtp_security: Option<String>,
+
+        /// Read password/secret from standard input.
+        #[arg(long, conflicts_with = "secret_command")]
+        secret_stdin: bool,
+
+        /// Command whose standard output produces the secret.
+        #[arg(long, conflicts_with = "secret_stdin")]
+        secret_command: Option<String>,
     },
     /// Update existing account settings.
-    Update { name: String },
-    /// Remove an account.
-    Remove {
+    Update {
+        /// Account name or ID to update.
         name: String,
+
+        /// Rename account to a new unique name.
+        #[arg(long)]
+        name_new: Option<String>,
+
+        /// Enable account.
+        #[arg(long, conflicts_with = "disable")]
+        enable: bool,
+
+        /// Disable account.
+        #[arg(long, conflicts_with = "enable")]
+        disable: bool,
+
+        /// Read updated password from standard input.
+        #[arg(long, conflicts_with = "secret_command")]
+        secret_stdin: bool,
+
+        /// Command whose output produces the updated password.
+        #[arg(long, conflicts_with = "secret_stdin")]
+        secret_command: Option<String>,
+
+        /// Update email address.
+        #[arg(long)]
+        email: Option<String>,
+
+        /// Update username.
+        #[arg(long)]
+        username: Option<String>,
+
+        /// Update IMAP host.
+        #[arg(long)]
+        imap_host: Option<String>,
+
+        /// Update IMAP port.
+        #[arg(long)]
+        imap_port: Option<u16>,
+
+        /// Update IMAP security.
+        #[arg(long)]
+        imap_security: Option<String>,
+
+        /// Update SMTP host.
+        #[arg(long)]
+        smtp_host: Option<String>,
+
+        /// Update SMTP port.
+        #[arg(long)]
+        smtp_port: Option<u16>,
+
+        /// Update SMTP security.
+        #[arg(long)]
+        smtp_security: Option<String>,
+    },
+    /// Remove an account (disables by default, deletes data with --purge).
+    Remove {
+        /// Account name or ID.
+        name: String,
+
+        /// Permanently delete account and all associated mail/feed content.
         #[arg(long)]
         purge: bool,
     },
     /// Run diagnostic checks on account connectivity.
-    Check { name: Option<String> },
+    Check {
+        /// Specific account name or ID (defaults to all enabled accounts).
+        name: Option<String>,
+    },
 }
 
 #[derive(Debug, Args)]
@@ -407,75 +525,257 @@ pub enum GenerateCommands {
     },
 }
 
-// Stubs for Phase 3C commands
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+#[value(rename_all = "lowercase")]
+pub enum MarkMode {
+    Read,
+    Unread,
+    Seen,
+    Unseen,
+    Starred,
+    Unstarred,
+}
+
 #[derive(Debug, Args)]
-pub struct MarkStubArgs {
-    pub mode: String,
+pub struct MarkArgs {
+    /// Flag mutation mode.
+    #[arg(value_enum)]
+    pub mode: MarkMode,
+
+    /// Item identifiers (8-hex short prefix, UUIDv7, or '-' for stdin).
+    #[arg(required = true, num_args = 1..)]
     pub ids: Vec<String>,
 }
 
 #[derive(Debug, Args)]
-pub struct MoveStubArgs {
+pub struct MoveArgs {
+    /// Mail item identifiers to move (8-hex short prefix, UUIDv7, or '-' for stdin).
+    #[arg(required = true, num_args = 1..)]
     pub ids: Vec<String>,
-    #[arg(long)]
+
+    /// Target mail folder name or role (e.g. inbox, sent, trash, archive).
+    #[arg(long, required = true)]
     pub to: String,
 }
 
 #[derive(Debug, Args)]
-pub struct CopyStubArgs {
+pub struct CopyArgs {
+    /// Mail item identifiers to copy (8-hex short prefix, UUIDv7, or '-' for stdin).
+    #[arg(required = true, num_args = 1..)]
     pub ids: Vec<String>,
-    #[arg(long)]
+
+    /// Target mail folder name or role (e.g. inbox, sent, trash, archive).
+    #[arg(long, required = true)]
     pub to: String,
 }
 
 #[derive(Debug, Args)]
-pub struct DeleteStubArgs {
+pub struct DeleteArgs {
+    /// Mail item identifiers to delete (moves to trash by default).
+    #[arg(required = true, num_args = 1..)]
     pub ids: Vec<String>,
+
+    /// Permanently expunge items from the server instead of moving to trash.
     #[arg(long)]
     pub expunge: bool,
 }
 
 #[derive(Debug, Args)]
-pub struct HideStubArgs {
+pub struct HideArgs {
+    /// Feed item identifiers to hide permanently from all streams and search.
+    #[arg(required = true, num_args = 1..)]
     pub ids: Vec<String>,
 }
 
 #[derive(Debug, Args)]
-pub struct ComposeStubArgs {
+pub struct ComposeArgs {
+    /// Recipient email address (repeatable).
     #[arg(long)]
-    pub to: Option<String>,
+    pub to: Vec<String>,
+
+    /// Carbon copy recipient (repeatable).
     #[arg(long)]
+    pub cc: Vec<String>,
+
+    /// Blind carbon copy recipient (repeatable).
+    #[arg(long)]
+    pub bcc: Vec<String>,
+
+    /// Subject line.
+    #[arg(short = 's', long)]
     pub subject: Option<String>,
+
+    /// Read message body from standard input.
+    #[arg(long)]
+    pub body_stdin: bool,
+
+    /// Attach a file (repeatable). Must be a regular readable file.
+    #[arg(long)]
+    pub attach: Vec<PathBuf>,
+
+    /// Send a previously saved draft by ID (deletes draft upon queueing).
+    #[arg(long)]
+    pub draft: Option<String>,
+
+    /// Save as draft to local drafts table without sending.
+    #[arg(long)]
+    pub save_draft: bool,
+
+    /// Block until the queued operation reaches a terminal state.
+    #[arg(long)]
+    pub now: bool,
+
+    /// Do not append a copy to the Sent folder.
+    #[arg(long)]
+    pub no_append_sent: bool,
+
+    /// Open $EDITOR ($VISUAL, then vi) with a message template.
+    #[arg(long)]
+    pub edit: bool,
 }
 
 #[derive(Debug, Args)]
-pub struct ReplyStubArgs {
+pub struct ReplyArgs {
+    /// Mail item to reply to (short ID or UUIDv7).
     pub id: String,
+
+    /// Reply to all original recipients (To + Cc).
+    #[arg(long)]
+    pub all: bool,
+
+    /// Quote the original message body with '> '.
+    #[arg(long)]
+    pub quote: bool,
+
+    /// Read reply body from standard input.
+    #[arg(long)]
+    pub body_stdin: bool,
+
+    /// Open editor with prefilled template.
+    #[arg(long)]
+    pub edit: bool,
+
+    /// Block until send completes.
+    #[arg(long)]
+    pub now: bool,
+
+    /// Save as draft instead of sending.
+    #[arg(long)]
+    pub save_draft: bool,
 }
 
 #[derive(Debug, Args)]
-pub struct ForwardStubArgs {
+pub struct ForwardArgs {
+    /// Mail item to forward (short ID or UUIDv7).
     pub id: String,
+
+    /// Forward recipient email address (repeatable).
+    #[arg(long)]
+    pub to: Vec<String>,
+
+    /// Attach the original raw MIME message as a message/rfc822 attachment.
+    #[arg(long)]
+    pub attach_original: bool,
+
+    /// Read commentary body from standard input.
+    #[arg(long)]
+    pub body_stdin: bool,
+
+    /// Open editor with prefilled template.
+    #[arg(long)]
+    pub edit: bool,
+
+    /// Block until send completes.
+    #[arg(long)]
+    pub now: bool,
+
+    /// Save as draft instead of sending.
+    #[arg(long)]
+    pub save_draft: bool,
 }
 
 #[derive(Debug, Args)]
-pub struct AttachmentStubArgs {
-    pub action: String,
+pub struct AttachmentArgs {
+    #[command(subcommand)]
+    pub command: AttachmentCommands,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum AttachmentCommands {
+    /// List attachments for a message item.
+    List {
+        /// Item identifier.
+        id: String,
+    },
+    /// Download an attachment part to disk.
+    Download {
+        /// Item identifier.
+        id: String,
+        /// MIME section ID (e.g. "2", "1.2").
+        section_id: String,
+        /// Output destination path (defaults to original filename in current directory).
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+    },
+    /// Download and open an attachment with the desktop default application (xdg-open).
+    Open {
+        /// Item identifier.
+        id: String,
+        /// MIME section ID (e.g. "2", "1.2").
+        section_id: String,
+    },
 }
 
 #[derive(Debug, Args)]
-pub struct SyncStubArgs {
+pub struct SyncArgs {
+    /// Scope to a specific account name or ID.
+    #[arg(short = 'a', long)]
+    pub account: Option<String>,
+
+    /// Scope to a specific mail folder name or role.
+    #[arg(long)]
+    pub folder: Option<String>,
+
+    /// Scope to a specific feed name or URL.
+    #[arg(long)]
+    pub feed: Option<String>,
+
+    /// Block and wait until sync job finishes.
     #[arg(long)]
     pub wait: bool,
+
+    /// Force a full refetch, ignoring cached sync state.
+    #[arg(long)]
+    pub full: bool,
 }
 
 #[derive(Debug, Args)]
-pub struct DaemonStubArgs {
-    pub action: String,
+pub struct DaemonArgs {
+    #[command(subcommand)]
+    pub command: DaemonCommands,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum DaemonCommands {
+    /// Report running status, accounts, and pending queue.
+    Status {
+        #[arg(long)]
+        json: bool,
+    },
+    /// Stop the background daemon user service.
+    Stop,
+    /// Reload configuration and accounts in the background daemon.
+    Reload,
+    /// View systemd journal logs for the daemon service.
+    Logs {
+        /// Follow live journal output.
+        #[arg(short = 'f', long)]
+        follow: bool,
+    },
 }
 
 #[derive(Debug, Args)]
-pub struct DoctorStubArgs {
+pub struct DoctorArgs {
     #[arg(long)]
     pub json: bool,
 }
