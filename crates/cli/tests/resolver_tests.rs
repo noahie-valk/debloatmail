@@ -1,6 +1,4 @@
-use debloatmail_cli::resolve::{
-    resolve_account, resolve_feed, resolve_folder, resolve_item_id,
-};
+use debloatmail_cli::resolve::{resolve_account, resolve_feed, resolve_folder, resolve_item_id};
 use rusqlite::Connection;
 
 fn setup_test_db() -> Connection {
@@ -119,6 +117,7 @@ fn test_entities_resolution() {
     // Feed resolution by title and url
     let feed_by_title = resolve_feed(&conn, Some(&acc.id), "Rust Blog").unwrap();
     assert_eq!(feed_by_title.url, "https://blog.rust-lang.org/feed.xml");
-    let feed_by_url = resolve_feed(&conn, Some(&acc.id), "https://blog.rust-lang.org/feed.xml").unwrap();
+    let feed_by_url =
+        resolve_feed(&conn, Some(&acc.id), "https://blog.rust-lang.org/feed.xml").unwrap();
     assert_eq!(feed_by_url.name, "Rust Blog");
 }

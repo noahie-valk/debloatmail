@@ -92,7 +92,13 @@ fn test_cli_list_command_formats() {
 
     // 2. JSON format
     let mut cmd_json = Command::cargo_bin("debloatmailctl").unwrap();
-    cmd_json.args(["list", "--format", "json", "--db", db_path.to_str().unwrap()]);
+    cmd_json.args([
+        "list",
+        "--format",
+        "json",
+        "--db",
+        db_path.to_str().unwrap(),
+    ]);
     let assert_json = cmd_json.assert().success();
     let stdout_json = String::from_utf8(assert_json.get_output().stdout.clone()).unwrap();
     assert!(stdout_json.contains("\"items\":"));
@@ -102,12 +108,20 @@ fn test_cli_list_command_formats() {
 
     // 3. Plain format
     let mut cmd_plain = Command::cargo_bin("debloatmailctl").unwrap();
-    cmd_plain.args(["list", "--format", "plain", "--db", db_path.to_str().unwrap()]);
+    cmd_plain.args([
+        "list",
+        "--format",
+        "plain",
+        "--db",
+        db_path.to_str().unwrap(),
+    ]);
     cmd_plain
         .assert()
         .success()
         .stdout(predicate::str::contains("3f2a9c1e\t"))
-        .stdout(predicate::str::contains("Alice Chen\tRe: release checklist"));
+        .stdout(predicate::str::contains(
+            "Alice Chen\tRe: release checklist",
+        ));
 
     // 4. Plain --print0 format
     let mut cmd_print0 = Command::cargo_bin("debloatmailctl").unwrap();
@@ -133,13 +147,19 @@ fn test_cli_read_command() {
     // Read cached message body
     let mut cmd = Command::cargo_bin("debloatmailctl").unwrap();
     cmd.args(["read", "3f2a", "--db", db_path.to_str().unwrap()]);
-    cmd.assert()
-        .success()
-        .stdout(predicate::str::contains("Hello world! The release checklist is verified."));
+    cmd.assert().success().stdout(predicate::str::contains(
+        "Hello world! The release checklist is verified.",
+    ));
 
     // Read with headers
     let mut cmd_hdr = Command::cargo_bin("debloatmailctl").unwrap();
-    cmd_hdr.args(["read", "3f2a", "--headers", "--db", db_path.to_str().unwrap()]);
+    cmd_hdr.args([
+        "read",
+        "3f2a",
+        "--headers",
+        "--db",
+        db_path.to_str().unwrap(),
+    ]);
     cmd_hdr
         .assert()
         .success()
@@ -149,10 +169,9 @@ fn test_cli_read_command() {
     // Read feed item
     let mut cmd_feed = Command::cargo_bin("debloatmailctl").unwrap();
     cmd_feed.args(["read", "7b0d", "--db", db_path.to_str().unwrap()]);
-    cmd_feed
-        .assert()
-        .success()
-        .stdout(predicate::str::contains("Async cancellation in Rust is a critical pattern."));
+    cmd_feed.assert().success().stdout(predicate::str::contains(
+        "Async cancellation in Rust is a critical pattern.",
+    ));
 
     // Read feed with --raw errors (exit 2)
     let mut cmd_raw_feed = Command::cargo_bin("debloatmailctl").unwrap();
@@ -176,7 +195,9 @@ fn test_cli_read_command() {
         .assert()
         .failure()
         .code(7)
-        .stderr(predicate::str::contains("body not cached and --offline specified"));
+        .stderr(predicate::str::contains(
+            "body not cached and --offline specified",
+        ));
 
     // Ambiguous prefix exits 9
     let mut cmd_ambig = Command::cargo_bin("debloatmailctl").unwrap();
@@ -237,7 +258,9 @@ fn test_cli_search_command() {
         .assert()
         .failure()
         .code(2)
-        .stderr(predicate::str::contains("unknown search operator 'unknown:'"));
+        .stderr(predicate::str::contains(
+            "unknown search operator 'unknown:'",
+        ));
 }
 
 #[test]
@@ -265,11 +288,19 @@ fn test_cli_inspecting_and_utility_commands() {
 
     // Feed show
     let mut cmd_fshow = Command::cargo_bin("debloatmailctl").unwrap();
-    cmd_fshow.args(["feed", "show", "Rust Blog", "--db", db_path.to_str().unwrap()]);
+    cmd_fshow.args([
+        "feed",
+        "show",
+        "Rust Blog",
+        "--db",
+        db_path.to_str().unwrap(),
+    ]);
     cmd_fshow
         .assert()
         .success()
-        .stdout(predicate::str::contains("https://blog.rust-lang.org/feed.xml"));
+        .stdout(predicate::str::contains(
+            "https://blog.rust-lang.org/feed.xml",
+        ));
 
     // Account list
     let mut cmd_acc = Command::cargo_bin("debloatmailctl").unwrap();
@@ -282,7 +313,13 @@ fn test_cli_inspecting_and_utility_commands() {
 
     // Account show
     let mut cmd_ashow = Command::cargo_bin("debloatmailctl").unwrap();
-    cmd_ashow.args(["account", "show", "fastmail", "--db", db_path.to_str().unwrap()]);
+    cmd_ashow.args([
+        "account",
+        "show",
+        "fastmail",
+        "--db",
+        db_path.to_str().unwrap(),
+    ]);
     cmd_ashow
         .assert()
         .success()

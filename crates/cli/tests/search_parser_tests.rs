@@ -11,17 +11,68 @@ fn test_all_closed_operators() {
     assert!(fts.contains("title:\"release\"*"));
     assert!(fts.contains("author:\"alice\"*"));
 
-    assert!(compiled.sql_predicates.iter().any(|p| p.contains("from_addr LIKE '%alice@example.com%'")));
-    assert!(compiled.sql_predicates.iter().any(|p| p.contains("to_addrs LIKE '%bob@example.com%'")));
-    assert!(compiled.sql_predicates.contains(&"v.unread = 1".to_string()));
-    assert!(compiled.sql_predicates.contains(&"v.starred = 1".to_string()));
-    assert!(compiled.sql_predicates.contains(&"v.kind = 'mail'".to_string()));
-    assert!(compiled.sql_predicates.contains(&"v.has_attachments = 1".to_string()));
-    assert!(compiled.sql_predicates.iter().any(|p| p.contains("folders WHERE name = 'INBOX'")));
-    assert!(compiled.sql_predicates.iter().any(|p| p.contains("accounts WHERE name = 'fastmail'")));
-    assert!(compiled.sql_predicates.iter().any(|p| p.contains("feeds WHERE title = 'rust'")));
-    assert!(compiled.sql_predicates.iter().any(|p| p.contains("v.sort_at >=")));
-    assert!(compiled.sql_predicates.iter().any(|p| p.contains("v.sort_at <=")));
+    assert!(
+        compiled
+            .sql_predicates
+            .iter()
+            .any(|p| p.contains("from_addr LIKE '%alice@example.com%'"))
+    );
+    assert!(
+        compiled
+            .sql_predicates
+            .iter()
+            .any(|p| p.contains("to_addrs LIKE '%bob@example.com%'"))
+    );
+    assert!(
+        compiled
+            .sql_predicates
+            .contains(&"v.unread = 1".to_string())
+    );
+    assert!(
+        compiled
+            .sql_predicates
+            .contains(&"v.starred = 1".to_string())
+    );
+    assert!(
+        compiled
+            .sql_predicates
+            .contains(&"v.kind = 'mail'".to_string())
+    );
+    assert!(
+        compiled
+            .sql_predicates
+            .contains(&"v.has_attachments = 1".to_string())
+    );
+    assert!(
+        compiled
+            .sql_predicates
+            .iter()
+            .any(|p| p.contains("folders WHERE name = 'INBOX'"))
+    );
+    assert!(
+        compiled
+            .sql_predicates
+            .iter()
+            .any(|p| p.contains("accounts WHERE name = 'fastmail'"))
+    );
+    assert!(
+        compiled
+            .sql_predicates
+            .iter()
+            .any(|p| p.contains("feeds WHERE title = 'rust'"))
+    );
+    assert!(
+        compiled
+            .sql_predicates
+            .iter()
+            .any(|p| p.contains("v.sort_at >="))
+    );
+    assert!(
+        compiled
+            .sql_predicates
+            .iter()
+            .any(|p| p.contains("v.sort_at <="))
+    );
 }
 
 #[test]
@@ -32,9 +83,22 @@ fn test_negated_operators() {
     let fts = compiled.fts_query.expect("should have fts query");
     assert!(fts.contains("NOT (\"invoice\"*)"));
 
-    assert!(compiled.sql_predicates.iter().any(|p| p.contains("from_addr LIKE '%spam.com%'") && p.contains("NOT IN")));
-    assert!(compiled.sql_predicates.contains(&"v.starred = 0".to_string()));
-    assert!(compiled.sql_predicates.contains(&"v.kind != 'feed'".to_string()));
+    assert!(
+        compiled
+            .sql_predicates
+            .iter()
+            .any(|p| p.contains("from_addr LIKE '%spam.com%'") && p.contains("NOT IN"))
+    );
+    assert!(
+        compiled
+            .sql_predicates
+            .contains(&"v.starred = 0".to_string())
+    );
+    assert!(
+        compiled
+            .sql_predicates
+            .contains(&"v.kind != 'feed'".to_string())
+    );
 }
 
 #[test]
