@@ -1,8 +1,8 @@
 # Implementation Progress
 
-## Current Status: Phase 3C Complete (`crates/cli` Mutations, Compose, Accounts, Feeds, Diagnostics)
+## Current Status: Phase 3D Complete (Golden CLI Tests & Week-One Validation Spike)
 
-Phase 1 (`core` + `store`), **Phase 2A (`crates/extract` + MIME fixtures & determinism)**, **Phase 2B (`crates/feeds`)**, **Phase 2C (`crates/auth` + `crates/engine`)**, **Phase 2D (`crates/sync` + `store` blob/thread/header helpers + `feeds` SSRF redirect hook)**, **Phase 3A (`crates/ffi` Qt-free engine trait, standalone flock, `InProcessEngine`, `DbusEngine`, and dual-transport parity)**, **Phase 3B (`crates/cli` `debloatmailctl` read/search engine)**, and **Phase 3C (`crates/cli` mutations, RFC 5322 compose, accounts, feeds, sync, daemon control, and doctor diagnostics)** are complete. Workspace dependencies and toolchains are pinned to Rust 1.99.1 (Edition 2024), `clap 4.5.64`, `mail-parser 1.0.0`, `rusqlite 0.41.1`, and `zbus 5.19.0`. All 153 workspace tests pass, `cargo clippy` runs with zero warnings across all targets, `cargo deny` passes advisories/bans/licenses/sources, and `scripts/check-invariants.sh` exits cleanly with code 0.
+Phase 1 (`core` + `store`), **Phase 2A (`crates/extract` + MIME fixtures & determinism)**, **Phase 2B (`crates/feeds`)**, **Phase 2C (`crates/auth` + `crates/engine`)**, **Phase 2D (`crates/sync` + `store` blob/thread/header helpers + `feeds` SSRF redirect hook)**, **Phase 3A (`crates/ffi` Qt-free engine trait, standalone flock, `InProcessEngine`, `DbusEngine`, and dual-transport parity)**, **Phase 3B (`crates/cli` `debloatmailctl` read/search engine)**, **Phase 3C (`crates/cli` mutations, RFC 5322 compose, accounts, feeds, sync, daemon control, and doctor diagnostics)**, and **Phase 3D (Golden CLI snapshot suite, contractual exit code error matrix, and the Week-One Validation Spike)** are complete. Workspace dependencies and toolchains are pinned to Rust 1.99.1 (Edition 2024), `clap 4.5.64`, `mail-parser 1.0.0`, `rusqlite 0.41.1`, and `zbus 5.19.0`. All 174 workspace tests pass, `cargo clippy` runs with zero warnings across all targets, `cargo deny` passes advisories/bans/licenses/sources, and `scripts/check-invariants.sh` exits cleanly with code 0.
 
 ---
 
@@ -256,13 +256,47 @@ Phase 1 (`core` + `store`), **Phase 2A (`crates/extract` + MIME fixtures & deter
     - `cli_daemon_doctor_tests.rs`: Daemon status stopped exit code 0 parity and doctor diagnostic test suite.
   - 14 integration tests passing in `crates/cli`.
 
+#### H. Phase 3D: Golden CLI Tests, Contractual Error Matrix, and Week-One Validation Spike
+- **Golden JSON CLI Snapshot Suite (`crates/cli/tests/cli_golden_tests.rs`)**:
+  - Implemented deterministic test database seeding with fixed timestamps (`FIXED_NOW = 1700000000`) and RFC 3339 date handling.
+  - Built snapshot comparison harness comparing parsed `serde_json::Value` structures against 11 golden fixtures in `crates/cli/tests/fixtures/golden/`:
+    - `list_default.golden.json`: Default unified stream list with mail and feed items.
+    - `list_threads.golden.json`: Thread-grouped stream list.
+    - `search_query.golden.json`: FTS5 query results with match snippets.
+    - `folder_list.golden.json`: Standard folder listings with roles and unread counts.
+    - `feed_list.golden.json`: Feed subscriptions with error states and update intervals.
+    - `account_list.golden.json`: Configured accounts with masked secrets.
+    - `mutation_mark.golden.json`: JSON output for item mark mutations.
+    - `daemon_status_stopped.golden.json`: Contractual stopped daemon status response.
+    - `doctor_report.golden.json`: Full 11-step doctor diagnostic report.
+    - `error_unknown_operator.golden.json`: Structured error response for invalid search syntax (exit 2).
+    - `error_not_found.golden.json`: Structured error response for nonexistent item/account/feed IDs (exit 3).
+- **Exit Code & Error Matrix Suite (`crates/cli/tests/cli_error_matrix_tests.rs`)**:
+  - 9 automated test scenarios asserting contractual exit codes (0 through 9) documented in `docs/debloatmailctl.md` §1.2:
+    - Exit 0: Normal command success (`account list`).
+    - Exit 2: Usage / command syntax / unknown search operator rejection (`search 'foo:bar'`).
+    - Exit 3: Entity not found (`read 018f9999-9999-7000-8000-000000000000`).
+    - Exit 4: Authentication failure (`account check` when configuration policy fails).
+    - Exit 5: Network / I/O timeout failure (`compose --now --timeout 100ms`).
+    - Exit 6: Daemon unavailable when running without standalone fallback (`debloatmailctl --format json daemon stop`).
+    - Exit 7: Offline mode requested with uncached data (`--offline read <uncached_id>`).
+    - Exit 8: Standalone lock contention: verifies holding PID detection, error messaging, and refusal to open SQLite concurrently (`debloatmail-standalone.lock`).
+    - Exit 9: Ambiguous short ID prefix matching multiple items (`read 018f`).
+- **Week-One Validation Spike Scenario (`crates/cli/tests/week_one_spike_tests.rs`)**:
+  - Implemented the complete 9-step contractual spike sequence (`docs/debloatmailctl.md` §11 & `docs/architecture.md` §15) verifying all hard engine paths end-to-end against local loopback mock IMAP, mock SMTP, and mock HTTP RSS servers:
+    1. Account add (`account add --kind imap --name fastmail --provider fastmail --secret-command ...`).
+    2. Account check (`account check fastmail`: validates `keyring`, `imap_auth`, `imap_mailbox`, `smtp_auth`).
+    3. Standalone sync (`--no-daemon sync --wait --full`).
+    4. Unified list (`list --limit 20`).
+    5. On-demand body fetch & plaintext read (`read <id> --mark-read`).
+    6. Offline read (`--offline read <id>` succeeds from cache; uncached item exits 7).
+    7. Compose + send queue drain (`compose ...` + `--no-daemon sync --wait`).
+    8. Feed add + sync + unified list (`feed add ...` + `sync --wait` + `list` shows mail and feeds unified).
+    9. FTS5 search across both (`search 'rust after:2026-01-01'`).
+
 ---
 
 ### 11. Upcoming Phases
-
-#### Phase 3D – Golden CLI Tests & Week-One Validation Spike
-- CLI golden test harness matching `docs/debloatmailctl.md`.
-- End-to-end integration test validating offline/online operation, feed ingestion, and FTS5 search across the week-one validation spike (§11).
 
 #### Phase 4 – Daemon & D‑Bus (`debloatmaild`)
 - Implement the sole SQLite writer process, background sync scheduler, tray integration, and desktop notifications.
