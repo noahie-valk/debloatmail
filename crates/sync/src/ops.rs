@@ -21,13 +21,12 @@ use debloatmail_engine::{
     SmtpConnection, classify_imap_error, send_email, uid_expunge_messages,
 };
 use io_imap::client::ImapClientAsync;
+use io_imap::rfc3501::append::{ImapMessageAppend, ImapMessageAppendOptions};
 use io_imap::rfc3501::copy::{ImapMessageCopy, ImapMessageCopyOptions};
 use io_imap::rfc3501::search::{ImapMessageSearch, ImapMessageSearchOptions};
 use io_imap::rfc3501::store::{ImapMessageStoreOptions, ImapMessageStoreSilent};
-use io_imap::rfc4315::appenduid::{ImapAppendUid, ImapAppendUidOptions};
 use io_imap::rfc6851::r#move::{ImapMessageMove, ImapMessageMoveOptions};
-use io_imap::types::core::{AString, Atom, Literal, Vec1};
-use io_imap::types::extensions::binary::LiteralOrLiteral8;
+use io_imap::types::core::{AString, Atom, Vec1};
 use io_imap::types::flag::{Flag, StoreType};
 use io_imap::types::search::SearchKey;
 use io_imap::types::sequence::{SeqOrUid, Sequence, SequenceSet};
@@ -311,28 +310,22 @@ where
                 params![reason, now, row.id],
             )?;
             report.failed_permanently += 1;
-            report.events.push(SyncEvent::OpFinished {
+            report.events.push(SyncEvent::QueueCompleted {
                 op_id,
                 success: false,
-                error: Some(reason),
+                detail: Some(reason),
             });
             continue;
         }
 
         // Step 3: Execute the operation
         let outcome = match op_kind {
-            OpKind::Flag => {
-                execute_flag_op(conn, imap_conn, row.item_id, &row.payload).await
-            }
+            OpKind::Flag => execute_flag_op(conn, imap_conn, row.item_id, &row.payload).await,
             OpKind::Move => {
                 execute_move_op(conn, imap_conn, account_id, row.item_id, &row.payload).await
             }
-            OpKind::Delete => {
-                execute_delete_op(conn, imap_conn, row.item_id, &row.payload).await
-            }
-            OpKind::Expunge => {
-                execute_expunge_op(conn, imap_conn, row.item_id, &row.payload).await
-            }
+            OpKind::Delete => execute_delete_op(conn, imap_conn, row.item_id, &row.payload).await,
+            OpKind::Expunge => execute_expunge_op(conn, imap_conn, row.item_id, &row.payload).await,
             OpKind::Send => {
                 execute_send_op(
                     conn,
@@ -358,10 +351,10 @@ where
                     params![warning, now, row.id],
                 )?;
                 report.completed += 1;
-                report.events.push(SyncEvent::OpFinished {
+                report.events.push(SyncEvent::QueueCompleted {
                     op_id,
                     success: true,
-                    error: warning,
+                    detail: warning,
                 });
             }
             OpExecutionResult::ServerError { message } => {
@@ -377,10 +370,10 @@ where
                         params![i64::from(new_attempts), message, now, row.id],
                     )?;
                     report.failed_permanently += 1;
-                    report.events.push(SyncEvent::OpFinished {
+                    report.events.push(SyncEvent::QueueCompleted {
                         op_id,
                         success: false,
-                        error: Some(message),
+                        detail: Some(message),
                     });
                 } else {
                     conn.execute(
@@ -872,8 +865,8 @@ where
     {
         match check_message_id_in_sent_folder(imap_conn, sent_name, &payload.message_id).await {
             Ok(true) => {
-                let mut note =
-                    "confirmed via Sent folder Message-ID search after interrupted send".to_string();
+                let mut note = "confirmed via Sent folder Message-ID search after interrupted send"
+                    .to_string();
                 if payload.had_reply_item && item_id.is_none() {
                     note.push_str("; replied-to item no longer exists locally");
                 }
@@ -926,9 +919,7 @@ where
             // Success is defined by the SMTP send: if APPEND fails, the op is still Done with a warning!
             if payload.append_to_sent {
                 if let Some(ref sent_name) = sent_folder_name {
-                    if let Err(append_err) =
-                        append_sent_copy(imap_conn, sent_name, &email).await
-                    {
+                    if let Err(append_err) = append_sent_copy(imap_conn, sent_name, &email).await {
                         warnings.push(format!(
                             "message sent via SMTP, but IMAP APPEND to '{sent_name}' failed: {append_err}"
                         ));
@@ -995,17 +986,15 @@ async fn check_message_id_in_sent_folder<S: AsyncByteStream>(
 ) -> Result<bool, SyncError> {
     select_folder(imap_conn, sent_folder_name).await?;
 
-    let header_key = AString::try_from("Message-ID").map_err(|e| {
-        SyncError::InvalidState(format!("invalid Message-ID header key: {e}"))
-    })?;
+    let header_key = AString::try_from("Message-ID")
+        .map_err(|e| SyncError::InvalidState(format!("invalid Message-ID header key: {e}")))?;
     let formatted_id = if message_id.starts_with('<') && message_id.ends_with('>') {
         message_id.to_string()
     } else {
         format!("<{}>", message_id.trim_matches(['<', '>']))
     };
-    let header_val = AString::try_from(formatted_id).map_err(|e| {
-        SyncError::InvalidState(format!("invalid Message-ID search value: {e}"))
-    })?;
+    let header_val = AString::try_from(formatted_id)
+        .map_err(|e| SyncError::InvalidState(format!("invalid Message-ID search value: {e}")))?;
 
     let criteria = Vec1::from(SearchKey::Header(header_key, header_val));
     let matches = imap_conn
@@ -1023,22 +1012,16 @@ async fn append_sent_copy<S: AsyncByteStream>(
     imap_conn: &mut ImapConnection<S>,
     sent_folder_name: &str,
     email: &OutgoingEmail,
-) -> Result<Option<(NonZeroU32, NonZeroU32)>, SyncError> {
+) -> Result<Option<(u32, u32)>, SyncError> {
     let mailbox = parse_imap_mailbox(sent_folder_name)?;
     let raw_bytes = build_rfc5322_message(email)?;
-    let literal = Literal::try_from(raw_bytes).map_err(|e| {
-        SyncError::InvalidState(format!("failed to construct IMAP literal for APPEND: {e}"))
-    })?;
-    let opts = ImapAppendUidOptions {
+    let opts = ImapMessageAppendOptions {
         flags: vec![Flag::Seen],
         date: None,
+        non_sync: false,
     };
-    let append_uid = imap_conn
-        .run(ImapAppendUid::new(
-            mailbox,
-            LiteralOrLiteral8::Literal(literal),
-            opts,
-        ))
+    let (_exists, append_uid) = imap_conn
+        .run(ImapMessageAppend::new(mailbox, raw_bytes, opts))
         .await
         .map_err(EngineError::from)?;
     Ok(append_uid)
