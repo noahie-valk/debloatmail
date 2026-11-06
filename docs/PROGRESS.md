@@ -1,8 +1,8 @@
 # Implementation Progress
 
-## Current Status: Phase 3B Complete (`crates/cli` Core Infrastructure & Read/Search Engine)
+## Current Status: Phase 3C Complete (`crates/cli` Mutations, Compose, Accounts, Feeds, Diagnostics)
 
-Phase 1 (`core` + `store`), **Phase 2A (`crates/extract` + MIME fixtures & determinism)**, **Phase 2B (`crates/feeds`)**, **Phase 2C (`crates/auth` + `crates/engine`)**, **Phase 2D (`crates/sync` + `store` blob/thread/header helpers + `feeds` SSRF redirect hook)**, **Phase 3A (`crates/ffi` Qt-free engine trait, standalone flock, `InProcessEngine`, `DbusEngine`, and dual-transport parity)**, and **Phase 3B (`crates/cli` `debloatmailctl` binary, direct WAL reads, keyset pagination, Gmail-style FTS5 search parser, plaintext reader, formatters, and inspecting commands)** are complete. Workspace dependencies and toolchains are pinned to Rust 1.99.1 (Edition 2024), `clap 4.5.64`, `mail-parser 1.0.0`, `rusqlite 0.41.1`, and `zbus 5.19.0`. All 139 workspace tests pass, `cargo clippy` runs with zero warnings across all targets, `cargo deny` passes advisories/bans/licenses/sources, and `scripts/check-invariants.sh` exits cleanly with code 0.
+Phase 1 (`core` + `store`), **Phase 2A (`crates/extract` + MIME fixtures & determinism)**, **Phase 2B (`crates/feeds`)**, **Phase 2C (`crates/auth` + `crates/engine`)**, **Phase 2D (`crates/sync` + `store` blob/thread/header helpers + `feeds` SSRF redirect hook)**, **Phase 3A (`crates/ffi` Qt-free engine trait, standalone flock, `InProcessEngine`, `DbusEngine`, and dual-transport parity)**, **Phase 3B (`crates/cli` `debloatmailctl` read/search engine)**, and **Phase 3C (`crates/cli` mutations, RFC 5322 compose, accounts, feeds, sync, daemon control, and doctor diagnostics)** are complete. Workspace dependencies and toolchains are pinned to Rust 1.99.1 (Edition 2024), `clap 4.5.64`, `mail-parser 1.0.0`, `rusqlite 0.41.1`, and `zbus 5.19.0`. All 153 workspace tests pass, `cargo clippy` runs with zero warnings across all targets, `cargo deny` passes advisories/bans/licenses/sources, and `scripts/check-invariants.sh` exits cleanly with code 0.
 
 ---
 
@@ -214,17 +214,51 @@ Phase 1 (`core` + `store`), **Phase 2A (`crates/extract` + MIME fixtures & deter
   - `resolver_tests.rs`: Prefix resolution, ambiguity, and not-found tests.
   - `search_parser_tests.rs`: Adversarial input safety, operator combinations, and unknown operator rejection.
 
+#### G. Phase 3C: CLI Write & Action Surface (`crates/cli`)
+- **Engine Dispatch & CLI Guard Rails (`executor.rs`)**:
+  - `init_engine`: Uniform engine dispatch acquiring `StandaloneLock` on `$XDG_STATE_HOME/debloatmail/debloatmail-standalone.lock` for direct `InProcessEngine` when `--no-daemon` is specified or daemon is inactive, or connecting seamlessly via `DbusEngine`.
+  - Non-interactive safety: `confirm_destructive` protects `--expunge` and feed purge/hide actions, requiring `-y`/`--yes` when not attached to a TTY.
+  - Offline guards: Enforces `--offline` mode check with exit code 7 before dispatching online network operations.
+- **Item Mutations (`commands/mark.rs`, `move_cmd.rs`, `copy_cmd.rs`, `delete.rs`, `hide.rs`)**:
+  - `mark read|unread|starred|unstarred <ids...>`: Supports multi-ID arguments and stdin `-` pipelines, git-style prefix matching, `--dry-run`, and emits contractual human, JSON, JSONL, and plain format summaries.
+  - `move` and `copy`: Validates mail-only targets (rejecting feeds with contractual message), resolves folder names/roles to UUIDs, and enqueues folder migration ops.
+  - `delete`: Mail-only deletion with support for `--expunge` (triggering physical expunge op after confirmation).
+  - `hide`: Feed-only action setting `hidden_at` timestamp with destructive confirmation guard.
+- **RFC 5322 Generator & Compose Surface (`rfc5322.rs`, `commands/compose.rs`, `reply.rs`, `forward.rs`, `attachment.rs`)**:
+  - `rfc5322.rs`: Clean RFC 5322 and MIME message generator supporting single-part plaintext and multipart/mixed base64-encoded file attachments.
+  - `compose`: Handles `--to`, `--cc`, `--bcc`, `--subject`, `--body-stdin`, interactive `$EDITOR` / `$VISUAL` / `nano` editing, `--save-draft`, `--draft <ID>` revision, `--dry-run` inspection, and `--now` expedited delivery.
+  - `reply <id>`: Mail-only action prefilling To/Cc from author and recipient headers (distinguishing single reply vs `--all`), prepending `Re:` idempotently, populating `In-Reply-To` and threading `References`, and quoting original body with `--quote`.
+  - `forward <id>`: Mail-only action prepending `Fwd:`, generating formatted original header quote blocks, and optionally attaching the complete original `.eml` raw blob via `--attach-original`.
+  - `attachment`: `list` item attachments, `download` part or all attachments to destination folder or stdout (`-`), and `open` attachments using `xdg-open`.
+- **Feed Management Surface (`commands/feed.rs`)**:
+  - `feed add <URL>`: Validates feed format, performs initial network poll with 15-second timeout, gracefully falls back to unvalidated state (`validated: false`) on slow servers per `docs/debloatmailctl.md` §8, and persists feed with custom polling interval.
+  - `feed update`: Updates title and poll interval.
+  - `feed set-url <NAME|OLD_URL> <NEW_URL>`: Executes atomic soft-remove of old feed and inserts new feed per §8 specification.
+  - `feed remove`: Soft-removes feed by default (sets `removed_at`), or purges completely with `--purge`.
+  - `feed refresh`: Triggers immediate background sync and supports `--wait` progress polling.
+- **Account Management Surface (`commands/account.rs`)**:
+  - `account add`: Interactive terminal wizard with masked password entry via `rpassword` when run without arguments, or flag configuration with `--provider proton` preset auto-fill (`127.0.0.1`, STARTTLS ports 1143/1025). Adheres to Invariant 6: secrets are never passed via argv; accepts `--secret-stdin` or `--secret-command`. Initializes SQLite store bootstrap if database does not yet exist.
+  - `account update`: Edits server endpoints, ports, security modes, and performs credential rotation.
+  - `account remove`: Disables accounts (`enabled = 0`) or cascades deletions with `--purge`.
+  - `account check`: Pings remote IMAP and SMTP endpoints using stored credentials and reports diagnostic connection health.
+- **Sync & Daemon Control (`commands/sync_cmd.rs`, `folder.rs`, `daemon.rs`)**:
+  - `sync` and `folder sync`: Dispatches account, folder, or global sync ops to the engine and polls completion under `--wait`.
+  - `daemon status`: Contractually exits code 0 with `Daemon: stopped` or JSON `{"daemon": {"running": false}}` when daemon process is inactive per §8.
+  - `daemon stop`, `daemon reload`, `daemon logs`.
+- **System Diagnostics (`commands/doctor.rs`)**:
+  - Implements all 11 diagnostic checks specified in `docs/debloatmailctl.md` §8: configuration file presence, database schema version (`<= 3`), SQLite WAL & integrity check, secret store reachability & credential retrieval, blob store refcount reconciliation, FTS5 full-text index consistency, folder UIDVALIDITY continuity, send queue health, unvalidated feeds, cache size vs limit, and daemon D-Bus reachability.
+  - Diagnostic `--fix` triggers SQLite `VACUUM` and integrity repairs; outputs structured JSON with `--json`.
+- **Integration Test Suite**:
+  - Added 4 comprehensive integration test binaries:
+    - `cli_mutation_tests.rs`: Item flag mutations, move/copy folder resolution, feed hide vs mail delete restrictions, dry-run, and stdin batch execution.
+    - `cli_compose_tests.rs`: RFC 5322 generation, draft creation, dry-run compose, reply/forward header prefilling, and attachment download/listing.
+    - `cli_feed_account_tests.rs`: Account creation wizard/flags, ProtonMail preset, secret rotation, feed add/update/set-url/remove, and sync dispatch.
+    - `cli_daemon_doctor_tests.rs`: Daemon status stopped exit code 0 parity and doctor diagnostic test suite.
+  - 14 integration tests passing in `crates/cli`.
+
 ---
 
 ### 11. Upcoming Phases
-
-#### Phase 3C – CLI Write & Action Surface (`crates/cli`)
-- Implement mutation commands: `mark read|unread|starred|unstarred`, `move`, `copy`, `delete [--expunge]`, `hide`.
-- Implement `compose`, `reply`, `forward`, `attachment <list|download|open>`.
-- Implement `feed add`, `update`, `set-url`, `remove`, `refresh`.
-- Implement `account add` (interactive wizard & flags), `update`, `remove`, `check`.
-- Implement `sync` & `folder sync` (`--full`, `--wait`).
-- Implement `daemon status|stop|reload|logs` and `doctor`.
 
 #### Phase 3D – Golden CLI Tests & Week-One Validation Spike
 - CLI golden test harness matching `docs/debloatmailctl.md`.
