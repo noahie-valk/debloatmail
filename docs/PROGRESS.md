@@ -1,8 +1,8 @@
 # Implementation Progress
 
-## Current Status: Phase 3A Complete (`crates/ffi` Engine Traits & Dual Transports)
+## Current Status: Phase 3B Complete (`crates/cli` Core Infrastructure & Read/Search Engine)
 
-Phase 1 (`core` + `store`), **Phase 2A (`crates/extract` + MIME fixtures & determinism)**, **Phase 2B (`crates/feeds`)**, **Phase 2C (`crates/auth` + `crates/engine`)**, **Phase 2D (`crates/sync` + `store` blob/thread/header helpers + `feeds` SSRF redirect hook)**, and **Phase 3A (`crates/ffi` Qt-free engine trait, standalone flock, `InProcessEngine`, `DbusEngine`, and dual-transport parity)** are complete. Workspace dependencies and toolchains are pinned to Rust 1.99.1 (Edition 2024), `mail-parser 1.0.0`, `rusqlite 0.41.1`, and `zbus 5.19.0`. All 112 workspace tests pass, `cargo clippy` runs with zero warnings across all targets, `cargo deny` passes advisories/bans/licenses/sources, and `scripts/check-invariants.sh` exits cleanly with code 0.
+Phase 1 (`core` + `store`), **Phase 2A (`crates/extract` + MIME fixtures & determinism)**, **Phase 2B (`crates/feeds`)**, **Phase 2C (`crates/auth` + `crates/engine`)**, **Phase 2D (`crates/sync` + `store` blob/thread/header helpers + `feeds` SSRF redirect hook)**, **Phase 3A (`crates/ffi` Qt-free engine trait, standalone flock, `InProcessEngine`, `DbusEngine`, and dual-transport parity)**, and **Phase 3B (`crates/cli` `debloatmailctl` binary, direct WAL reads, keyset pagination, Gmail-style FTS5 search parser, plaintext reader, formatters, and inspecting commands)** are complete. Workspace dependencies and toolchains are pinned to Rust 1.99.1 (Edition 2024), `clap 4.5.64`, `mail-parser 1.0.0`, `rusqlite 0.41.1`, and `zbus 5.19.0`. All 139 workspace tests pass, `cargo clippy` runs with zero warnings across all targets, `cargo deny` passes advisories/bans/licenses/sources, and `scripts/check-invariants.sh` exits cleanly with code 0.
 
 ---
 
@@ -65,8 +65,9 @@ Phase 1 (`core` + `store`), **Phase 2A (`crates/extract` + MIME fixtures & deter
 
 ### 2. Workspace Verification
 
-- **Tests**: `cargo test --workspace --all-targets` passes all 112 tests:
+- **Tests**: `cargo test --workspace --all-targets` passes all 139 tests:
   - `debloatmail-auth`: 6 unit tests
+  - `debloatmail-cli`: 17 unit tests + 10 integration tests (`cli_read_tests`, `resolver_tests`, `search_parser_tests`)
   - `debloatmail-core`: 9 unit tests
   - `debloatmail-engine`: 23 unit tests
   - `debloatmail-extract`: 33 unit tests + 3 integration tests (`determinism`)
@@ -171,18 +172,63 @@ Phase 1 (`core` + `store`), **Phase 2A (`crates/extract` + MIME fixtures & deter
 
 ---
 
-### 10. Upcoming Phases
+### 10. Completed Phase 3B: CLI Core Infrastructure & Read/Search Engine (`crates/cli`)
 
-#### Phase 3B – CLI Read Surface (`crates/cli`)
-- Implement read commands in `debloatmailctl`: `list`, `read`, `search`, `threads`, `accounts`, `folders`, `feeds`, `status`.
-- Support `--json`, `--plain`, and `--no-daemon` flags.
+- **Binary & Workspace Scaffolding (`crates/cli`)**:
+  - Registered `debloatmail-cli` and binary `debloatmailctl` in workspace with approved dependencies (`clap 4.5.64`, `clap_complete 4.5.64`, `clap_mangen 0.2.33`, `toml 1.2.0`, `anstream 1.0.0`, `anstyle 1.0.14`, `rpassword 7.5.4`, `assert_cmd 2.2.2`, `predicates 3.1.4`).
+- **Contractual Exit Codes & Errors (`error.rs`)**:
+  - Implemented `CliError` strictly matching `docs/debloatmailctl.md` §7: exit codes 0 (success), 1 (internal), 2 (usage/unknown operator), 3 (not found), 4 (auth), 5 (network), 6 (daemon unavailable), 7 (offline mode), 8 (lock held), 9 (ambiguous id prefix).
+  - Emits contractual single-line error messages to `stderr` or structured `{"error": {"code": "...", "message": "..."}}` to `stdout` under `--format json`.
+- **Addressing & Short ID Resolution (`resolve.rs`)**:
+  - Git-style 8-hex prefix matching for `items.public_id`. Detects ambiguous prefixes and exits with code 9; missing IDs exit with code 3.
+  - Supports space-separated IDs and stdin pipeline reading via literal `"-"`.
+  - Client-side resolution for accounts, folders (name or role), and feeds (name, title, or URL).
+- **Output Formats & Styling (`format/`)**:
+  - `human`: Right-aligned columns with ANSI color highlighting unread items in bold and starred in yellow, respecting `--color` and `NO_COLOR`.
+  - `json`: Contractual single structured document with ISO 8601 UTC dates, full UUIDv7s, and keyset cursor envelope.
+  - `jsonl`: Streaming JSON objects without envelope.
+  - `plain`: Tab-separated columns (`short_id\tpublished_at\tauthor\ttitle`) and `--print0` NUL-separated full UUIDs.
+- **Unified Stream `list` Command (`commands/list.rs`)**:
+  - Reads directly from SQLite WAL with zero daemon/network overhead.
+  - Full filter support: `--mail`, `--feed`, `--unread`, `--starred`, `--folder`, `--feed <NAME>`, `--since`, `--before` (supporting relative `7d`, `2w` and ISO dates).
+  - Keyset cursor minting and validation (rejects mismatched sort key with exit code 2).
+  - Conversation thread view (`--threads`).
+- **Gmail-Style Search Query Parser & Search (`search_parser.rs`, `commands/search.rs`)**:
+  - Strict closed operator set per `docs/debloatmailctl.md` §9 and `docs/DATA-MODEL.md` §10.
+  - Rejects unknown operators with exit code 2.
+  - Automatic bare term prefix matching (`async*`) and safe FTS5 quote escaping.
+  - `--explain` diagnostics printing the compiled FTS5 expression and full SQL statement.
+- **Plaintext `read` Command (`commands/read.rs`)**:
+  - Displays body text, with optional RFC 5322 `--headers` and raw MIME via `--raw` (mail-only).
+  - Uncached body flow: under `--offline` exits code 7; online triggers on-demand fetch via engine (`InProcessEngine` or `DbusEngine`) and re-reads SQLite.
+  - Full thread printing (`--thread`).
+- **Inspecting & Utility Subcommands**:
+  - `folder list` & `folder stats`.
+  - `feed list` & `feed show`.
+  - `account list` & `account show` (secrets masked as `••• (in keyring)`).
+  - `config path`, `show`, `validate`, `get`, `set` (deep-merged TOML management).
+  - `generate completions <shell>`, `generate man`, `generate schema` (`0001_init.sql`).
+  - `version`.
+- **Integration Test Suite (`tests/`)**:
+  - `cli_read_tests.rs`: End-to-end `assert_cmd` test matrix against seeded SQLite fixture DB, asserting exit codes (0, 2, 3, 7, 9) and formatting output.
+  - `resolver_tests.rs`: Prefix resolution, ambiguity, and not-found tests.
+  - `search_parser_tests.rs`: Adversarial input safety, operator combinations, and unknown operator rejection.
+
+---
+
+### 11. Upcoming Phases
 
 #### Phase 3C – CLI Write & Action Surface (`crates/cli`)
-- Implement mutation commands: `mail mark-read`, `mail star`, `mail move`, `mail copy`, `mail delete`, `feed add`, `feed remove`, `feed refresh`, `account add`, `account check`, `compose send`, `sync`, `daemon status`.
+- Implement mutation commands: `mark read|unread|starred|unstarred`, `move`, `copy`, `delete [--expunge]`, `hide`.
+- Implement `compose`, `reply`, `forward`, `attachment <list|download|open>`.
+- Implement `feed add`, `update`, `set-url`, `remove`, `refresh`.
+- Implement `account add` (interactive wizard & flags), `update`, `remove`, `check`.
+- Implement `sync` & `folder sync` (`--full`, `--wait`).
+- Implement `daemon status|stop|reload|logs` and `doctor`.
 
 #### Phase 3D – Golden CLI Tests & Week-One Validation Spike
 - CLI golden test harness matching `docs/debloatmailctl.md`.
-- End-to-end integration test validating offline/online operation, feed ingestion, and FTS5 search.
+- End-to-end integration test validating offline/online operation, feed ingestion, and FTS5 search across the week-one validation spike (§11).
 
 #### Phase 4 – Daemon & D‑Bus (`debloatmaild`)
 - Implement the sole SQLite writer process, background sync scheduler, tray integration, and desktop notifications.
