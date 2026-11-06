@@ -408,7 +408,7 @@ pub fn list_accounts_fn(conn: &Connection) -> Result<Vec<FfiAccount>, FfiError> 
             id: r.get(0)?,
             name: r.get(1)?,
             kind: r.get(2)?,
-            email: r.get(3)?,
+            email: r.get::<_, Option<String>>(3)?.unwrap_or_default(),
             enabled: r.get::<_, i64>(4)? != 0,
             provider_preset: r.get(5)?,
             last_sync_at: last_sync.map(format_timestamp),
