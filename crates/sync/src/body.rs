@@ -11,7 +11,7 @@ use std::path::{Path, PathBuf};
 use debloatmail_core::BodyState;
 use debloatmail_engine::io::AsyncByteStream;
 use debloatmail_engine::{
-    Clock, ImapConnection, fetch_attachment_section, fetch_body_peek, validate_section_id,
+    Clock, ImapConnection, Rng, fetch_attachment_section, fetch_body_peek, validate_section_id,
 };
 use debloatmail_extract::{CURRENT_EXTRACTOR_VERSION, Limits, extract_message};
 use debloatmail_store::{
@@ -21,6 +21,7 @@ use debloatmail_store::{
 use rusqlite::{Connection, OptionalExtension, params};
 
 use crate::SyncError;
+use crate::id::mint_uuid_v7_from_clock;
 use crate::mail::select_folder;
 
 /// Result of fetching and extracting an email's body via `BODY.PEEK[]` (`SYNC.md` §6.1).
@@ -50,9 +51,10 @@ pub struct FetchedAttachmentOutcome {
 pub async fn fetch_item_body<S: AsyncByteStream>(
     conn: &mut Connection,
     imap_conn: &mut ImapConnection<S>,
-    blobs_dir: &Path,
+    cache_dir: &Path,
     item_id: i64,
     clock: &dyn Clock,
+    rng: &mut dyn Rng,
 ) -> Result<FetchedBodyOutcome, SyncError> {
     #[derive(Debug)]
     struct ItemMailTarget {
@@ -86,9 +88,8 @@ pub async fn fetch_item_body<S: AsyncByteStream>(
         .optional()?
         .ok_or_else(|| SyncError::InvalidState(format!("mail item {item_id} not found")))?;
 
-    let uid_nz = NonZeroU32::new(target.uid).ok_or_else(|| {
-        SyncError::InvalidState(format!("mail item {item_id} has invalid UID 0"))
-    })?;
+    let uid_nz = NonZeroU32::new(target.uid)
+        .ok_or_else(|| SyncError::InvalidState(format!("mail item {item_id} has invalid UID 0")))?;
 
     // Transition body_state -> 'pending' before network I/O (SYNC.md §6.1)
     conn.execute(
@@ -112,7 +113,6 @@ pub async fn fetch_item_body<S: AsyncByteStream>(
         }
     };
 
-    let raw_blob_hash = put_blob(blobs_dir, &raw_bytes)?;
     let extracted = match extract_message(&raw_bytes, &Limits::default()) {
         Ok(ext) => ext,
         Err(err) => {
@@ -124,15 +124,15 @@ pub async fn fetch_item_body<S: AsyncByteStream>(
         }
     };
 
-    let authoritative_attachments: Vec<NewAttachment> = extracted
+    let authoritative_attachments: Vec<NewAttachment<'_>> = extracted
         .attachments
         .iter()
         .map(|att| NewAttachment {
-            section_id: att.section_id.clone(),
-            filename: att.filename.clone(),
-            mime_type: att.mime_type.clone(),
+            section_id: &att.section_id,
+            filename: att.filename.as_deref(),
+            mime_type: &att.mime_type,
             size_bytes: att.size_bytes,
-            content_id: att.content_id.clone(),
+            content_id: att.content_id.as_deref(),
             is_pdf: att.is_pdf,
         })
         .collect();
@@ -146,14 +146,16 @@ pub async fn fetch_item_body<S: AsyncByteStream>(
 
     let tx = conn.transaction()?;
 
+    let raw_blob_hash = put_blob(&tx, cache_dir, &raw_bytes, now)?;
+
     // Update raw_blob reference counting
     if target.existing_raw_blob.as_deref() != Some(raw_blob_hash.as_str()) {
-        increment_blob_ref(&tx, &raw_blob_hash, raw_bytes.len() as i64, now)?;
+        increment_blob_ref(&tx, &raw_blob_hash, now)?;
         if let Some(old_hash) = &target.existing_raw_blob {
-            decrement_blob_ref(&tx, old_hash)?;
+            decrement_blob_ref(&tx, old_hash, now)?;
         }
     } else {
-        touch_blob(&tx, &raw_blob_hash, now)?;
+        let _ = touch_blob(&tx, cache_dir, &raw_blob_hash, now)?;
     }
 
     let text_title = if extracted.title != "(no subject)" {
@@ -164,8 +166,8 @@ pub async fn fetch_item_body<S: AsyncByteStream>(
     let text_author = extracted.author.as_deref().or(target.author.as_deref());
 
     tx.execute(
-        "INSERT INTO item_text (item_id, title, author, body, extractor_version)
-         VALUES (?1, ?2, ?3, ?4, ?5)
+        "INSERT INTO item_text (item_id, title, author, body, durable, extractor_version)
+         VALUES (?1, ?2, ?3, ?4, 0, ?5)
          ON CONFLICT(item_id) DO UPDATE SET
              title = excluded.title,
              author = excluded.author,
@@ -174,7 +176,7 @@ pub async fn fetch_item_body<S: AsyncByteStream>(
         params![
             item_id,
             text_title,
-            text_author,
+            text_author.unwrap_or(""),
             extracted.body,
             i64::from(CURRENT_EXTRACTOR_VERSION),
         ],
@@ -194,7 +196,7 @@ pub async fn fetch_item_body<S: AsyncByteStream>(
         ],
     )?;
 
-    reconcile_extracted_attachments(&tx, item_id, &authoritative_attachments)?;
+    reconcile_extracted_attachments(&tx, item_id, &authoritative_attachments, now)?;
 
     tx.execute(
         "UPDATE items
@@ -213,7 +215,9 @@ pub async fn fetch_item_body<S: AsyncByteStream>(
     )?;
 
     if references_hdr.is_some() || extracted.in_reply_to.is_some() {
-        rebuild_account_threads(&tx, target.account_id)?;
+        rebuild_account_threads(&tx, target.account_id, || {
+            mint_uuid_v7_from_clock(clock, rng).to_string()
+        })?;
     }
 
     tx.commit()?;
@@ -235,7 +239,7 @@ pub async fn fetch_item_body<S: AsyncByteStream>(
 pub async fn fetch_item_attachment<S: AsyncByteStream>(
     conn: &mut Connection,
     imap_conn: &mut ImapConnection<S>,
-    blobs_dir: &Path,
+    cache_dir: &Path,
     item_id: i64,
     section_id: &str,
     clock: &dyn Clock,
@@ -281,10 +285,10 @@ pub async fn fetch_item_attachment<S: AsyncByteStream>(
 
     // 2. Check if already cached on disk
     if let Some(existing_hash) = &target.blob_hash
-        && let Ok(path) = blob_path(blobs_dir, existing_hash)
+        && let Ok(path) = blob_path(cache_dir, existing_hash)
         && path.is_file()
     {
-        touch_blob(conn, existing_hash, now)?;
+        let _ = touch_blob(conn, cache_dir, existing_hash, now)?;
         return Ok(FetchedAttachmentOutcome {
             item_id,
             section_id: section_id.to_string(),
@@ -295,25 +299,25 @@ pub async fn fetch_item_attachment<S: AsyncByteStream>(
     }
 
     // 3. Fetch section via BODY.PEEK[<section_id>]
-    let uid_nz = NonZeroU32::new(target.uid).ok_or_else(|| {
-        SyncError::InvalidState(format!("mail item {item_id} has invalid UID 0"))
-    })?;
+    let uid_nz = NonZeroU32::new(target.uid)
+        .ok_or_else(|| SyncError::InvalidState(format!("mail item {item_id} has invalid UID 0")))?;
 
     select_folder(imap_conn, &target.folder_name).await?;
     let bytes = fetch_attachment_section(imap_conn, uid_nz, section_id).await?;
 
-    let new_hash = put_blob(blobs_dir, &bytes)?;
-    let path = blob_path(blobs_dir, &new_hash)?;
     let is_pdf = target.is_pdf || bytes.starts_with(b"%PDF-");
 
     let tx = conn.transaction()?;
+    let new_hash = put_blob(&tx, cache_dir, &bytes, now)?;
+    let path = blob_path(cache_dir, &new_hash)?;
+
     if target.blob_hash.as_deref() != Some(new_hash.as_str()) {
-        increment_blob_ref(&tx, &new_hash, bytes.len() as i64, now)?;
+        increment_blob_ref(&tx, &new_hash, now)?;
         if let Some(old_hash) = &target.blob_hash {
-            decrement_blob_ref(&tx, old_hash)?;
+            decrement_blob_ref(&tx, old_hash, now)?;
         }
     } else {
-        touch_blob(&tx, &new_hash, now)?;
+        let _ = touch_blob(&tx, cache_dir, &new_hash, now)?;
     }
 
     tx.execute(
