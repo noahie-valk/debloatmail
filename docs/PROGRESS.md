@@ -1,8 +1,8 @@
 # Implementation Progress
 
-## Current Status: Phase 2A, 2B, & 2C Complete; Toolchain & Dependencies Modernized
+## Current Status: Phase 2A, 2B, 2C, & 2D Complete; Toolchain & Dependencies Modernized
 
-Phase 1 (`core` + `store`), **Phase 2A (`crates/extract` + MIME fixtures & determinism)**, **Phase 2B (`crates/feeds`)**, and **Phase 2C (`crates/auth` + `crates/engine`)** are complete. Workspace dependencies and toolchains were modernized to Rust 1.99.1 (Edition 2024), `mail-parser 1.0.0`, and `rusqlite 0.41.1`. All 85 workspace tests pass, `cargo clippy` runs with zero warnings across all targets, `cargo deny` passes advisories/bans/licenses/sources, and `scripts/check-invariants.sh` exits cleanly with code 0.
+Phase 1 (`core` + `store`), **Phase 2A (`crates/extract` + MIME fixtures & determinism)**, **Phase 2B (`crates/feeds`)**, **Phase 2C (`crates/auth` + `crates/engine`)**, and **Phase 2D (`crates/sync` + `store` blob/thread/header helpers + `feeds` SSRF redirect hook)** are complete. Workspace dependencies and toolchains were modernized to Rust 1.99.1 (Edition 2024), `mail-parser 1.0.0`, and `rusqlite 0.41.1`. All 100 workspace tests pass, `cargo clippy` runs with zero warnings across all targets, `cargo deny` passes advisories/bans/licenses/sources, and `scripts/check-invariants.sh` exits cleanly with code 0.
 
 ---
 
@@ -64,13 +64,14 @@ Phase 1 (`core` + `store`), **Phase 2A (`crates/extract` + MIME fixtures & deter
 
 ### 2. Workspace Verification
 
-- **Tests**: `cargo test --workspace --all-targets` passes all 85 tests:
+- **Tests**: `cargo test --workspace --all-targets` passes all 100 tests:
   - `debloatmail-auth`: 6 unit tests
   - `debloatmail-core`: 9 unit tests
   - `debloatmail-engine`: 23 unit tests
   - `debloatmail-extract`: 33 unit tests + 3 integration tests (`determinism`)
-  - `debloatmail-feeds`: 5 integration tests
-  - `debloatmail-store`: 6 unit tests
+  - `debloatmail-feeds`: 1 unit test + 5 integration tests
+  - `debloatmail-store`: 8 unit tests
+  - `debloatmail-sync`: 12 unit & scenario integration tests
 - **Clippy**: `cargo clippy --workspace --all-targets -- -D warnings` passes cleanly (0 warnings).
 - **Formatting**: `cargo fmt --all -- --check` passes cleanly.
 
@@ -99,23 +100,42 @@ Phase 1 (`core` + `store`), **Phase 2A (`crates/extract` + MIME fixtures & deter
   - Implemented `AccountStateMachine`, `FailureClass`, and exponential backoff + jitter schedules (`account_reconnect_backoff`, `feed_poll_backoff`, `op_retry_backoff`, `deterministic_account_jitter`) in `crates/engine/src/state.rs`.
   - Implemented `run_account_check` in `crates/engine/src/check.rs` for `debloatmailctl account check` and `debloatmailctl doctor`.
 
-### 5. Security Hardening (Completed)
+### 5. Completed Phase 2D (`crates/sync` + `store` & `feeds` Extensions)
+
+- **Storage Helpers (`crates/store`)**:
+  - `blobs.rs`: Content-addressed BLAKE3 sharded file store (`blobs/ab/cd/...` with mode `0600` atomic write + rename), reference counting (`put_blob`, `increment_blob_ref`, `decrement_blob_ref`, `touch_blob`), and 1-hour grace-window garbage collection (`gc_blobs`).
+  - `threads.rs`: JWZ-lite account thread builder (`rebuild_account_threads`) with `References` / `In-Reply-To` chaining, 30-day same-`subject_norm` merging, `root_message_id`-anchored `public_id` preservation across rebuilds, and rollup calculation (`reply_count`, `unread_count`, `last_activity`, up to 3 distinct `participants`).
+  - `headers.rs`: Mail header upsert (`upsert_mail_header` seeding `item_text(title, author, body = '')`), provisional `BODYSTRUCTURE` attachment insertion (`replace_provisional_attachments`), and on-demand extracted attachment reconciliation (`reconcile_extracted_attachments` preserving `blob_hash` across `section_id` matches and decrementing orphaned blob refs).
+- **Feed Redirect Hook & Taxonomy (`crates/feeds`)**:
+  - Custom SSRF redirect policy (`build_feed_redirect_policy`) enforcing max 5 hops, rejecting `https:// -> http://` downgrades and non-HTTP(S) schemes, and rejecting loopback (`127.0.0.0/8`, `::1`, `localhost`), RFC 1918 private ranges, CGNAT (`100.64.0.0/10`), and link-local / cloud metadata (`169.254.0.0/16`, `fe80::/10`, `fc00::/7`).
+  - Explicit `404`/`410` (`FetchError::Gone`), `429`/`503` (`FetchError::RateLimited` with `Retry-After` delta-seconds parsing), `301`/`308` permanent redirect tracking (`permanent_redirect_url`), and `site_url` / `entry.content` / `entry.summary` extraction.
+- **Sync Orchestration (`crates/sync`)**:
+  - Zero sockets and zero TLS: generic over `ImapConnection<S: AsyncByteStream>`, `SmtpConnection<S: AsyncByteStream>`, and `FeedFetcher`.
+  - `id.rs`: Monotonic RFC 9562 UUIDv7 generator (`mint_uuid_v7_from_clock`).
+  - `scheduler.rs`: 4-class priority queue (`UserInitiated` > `QueueDrain` > `BackgroundScheduled` > `Housekeeping`), scope coalescing with 1-second post-`Done` window, `CancelToken`, and 100 ms `Progress` throttle with guaranteed `percent == 100` terminal emission.
+  - `recovery.rs`: Crash-safe startup recovery (`run_startup_recovery` resetting interrupted `body_state = 'pending'` to `'none'` while leaving `pending_ops.state = 'in_flight'` intact) and 7-day terminal `pending_ops` retention purge (`purge_expired_terminal_ops`).
+  - `mail.rs`: Folder discovery reconciliation preserving manual roles, 2,000-UID windowed header sync advancing `folders.uidnext` atomically per window with between-window preemption, 7-step staged `UIDVALIDITY` reset recovery preserving `items.public_id` by `Message-ID` and rebinding `pending_ops.item_id`, and `CONDSTORE` `CHANGEDSINCE` / fallback flag sync with pending-op-wins protection.
+  - `body.rs`: On-demand `BODY.PEEK[]` message body extraction and `BODY.PEEK[<section_id>]` attachment download with BlobStore deduplication.
+  - `ops.rs`: FIFO `pending_ops` drain (`flag`, `move`, `delete`, `expunge` via `UID EXPUNGE` when `UIDPLUS` is negotiated, and `send` with pre-built RFC 5322 blob, Sent-folder `Message-ID` duplicate guard after `SendOutcome::NoVerdict`, and `APPEND` fallback when `BURL` is absent) plus `queue_send_from_draft`.
+  - `feeds.rs`: Conditional feed polling (`304 Not Modified`, `200 OK` non-destructive upsert preserving `unread`/`starred`/`hidden_at`, `301`/`308` URL update, `410 Gone` cached-item retention) and hybrid 15-second `Feeds.Add` validation (`add_feed_hybrid` + `complete_pending_feed_validation`).
+
+### 6. Security Hardening (Completed)
 
 - **Secure DB file creation** – SQLite database files are created with mode 0600 and flags `O_EXCL|O_NOFOLLOW` to prevent symlink attacks. Implemented in [`secure_file.rs`](../crates/store/src/secure_file.rs). *(Docs: [SECURITY.md §8.5](SECURITY.md#85-permissions--secure-file-creation))*
 - **Feed parser hardening** – XML external entities and DTD processing are disabled in the RSS/Atom parser to mitigate XXE and Billion‑Laughs attacks. Implemented in [`parse.rs`](../crates/feeds/src/parse.rs). *(Docs: [SECURITY.md §6.2](SECURITY.md#62-xml-external-entity-protection))*
 - **Clippy lint compliance** – Fixed inner doc comment issue in `limits.rs` to satisfy `clippy::empty_line_after_doc_comments`. *(Docs: [SECURITY.md §8.3](SECURITY.md#83-lint-compliance))*
 - **Low‑level system calls** – Added `libc` dependency to use `open` flags securely in `crates/store`. *(Docs: [SECURITY.md §8.4](SECURITY.md#84-low-level-system-calls))*
 
-### 6. Toolchain Modernization & Scripts Verification (Completed)
+### 7. Toolchain Modernization & Scripts Verification (Completed)
 
 - **Toolchain Pinned**: Reinstated `rust-toolchain.toml` pinned to Rust `1.99.1`, updated workspace edition to `2024`.
 - **Parser Stack Migration (`mail-parser 1.0.0`)**: Refactored `crates/extract` (`header.rs` and `structure.rs`) to adapt to breaking 1.0.0 API changes (hierarchical `part.children()`, `part.decoded()` transfer decoding, `AddressList` mailbox iterators, and `ContentType` attribute accessors).
 - **SQLite 0.41 Integration**: Updated `crates/store` to `rusqlite = "0.41.1"` (bundled SQLite) and mapped `size_bytes: Option<u64>` to `i64` for `ToSql` compatibility.
 - **Verification Scripts**:
   - [`scripts/check-invariants.sh`](../scripts/check-invariants.sh): Added `last_activity` to the timestamp field allowlist per `docs/DATA-MODEL.md` §4.1 and fixed the clean-run exit code logic.
-  - [`scripts/run_security_checks.sh`](../scripts/run_security_checks.sh): Fully clean verification across `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace` (51/51 tests passing including all 33 golden MIME fixtures), and `cargo audit` (0 vulnerabilities).
+  - [`scripts/run_security_checks.sh`](../scripts/run_security_checks.sh): Fully clean verification across `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace`, and `cargo audit` (0 vulnerabilities).
 
-### 7. License & Dependency Hygiene (Completed — 2026-11-01)
+### 8. License & Dependency Hygiene (Completed — 2026-11-01)
 
 - **MIT license declared** across all workspace crates via `license = "MIT"` in `[workspace.package]` and `license.workspace = true` in each crate's `Cargo.toml`.
 - **`crates/feeds` joined the workspace** (`members` list in root `Cargo.toml`); its `version`, `edition`, and `license` now inherit from `[workspace.package]`. Edition bumped to `2024`.
@@ -124,10 +144,10 @@ Phase 1 (`core` + `store`), **Phase 2A (`crates/extract` + MIME fixtures & deter
 - **`data/org.noahie.debloatmail.metainfo.xml`** created with `<project_license>MIT</project_license>` and basic AppStream metadata.
 - Fixed pre-existing bug: `reqwest` feature flag renamed from `rustls-tls` to `rustls` in reqwest 0.13.
 
-### 8. Upcoming Phases
+### 9. Upcoming Phases
 
-#### Phase 2D / Phase 3 – Sync Orchestration & CLI Validation Spike (`crates/sync` & `crates/cli`)
-- Coordinate `crates/engine`, `crates/store`, `crates/extract`, and `crates/feeds` in `crates/sync`.
+#### Phase 3 – Engine Boundary & CLI Validation Spike (`crates/ffi` & `crates/cli`)
+- Define the Qt-free `Engine` trait and transport boundary in `crates/ffi`.
 - Build `crates/cli` (`debloatmailctl`) as the first consumer of the engine.
 - Demonstrate full end‑to‑end flow: authentication, sync, send queue, feed ingest, MIME extraction, and FTS5 search.
 - Ensure the CLI works before any QML UI is introduced.
