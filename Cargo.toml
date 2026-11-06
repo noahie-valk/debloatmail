@@ -9,6 +9,7 @@ members = [
     "crates/engine",
     "crates/sync",
     "crates/ffi",
+    "crates/cli",
 ]
 
 [workspace.package]
@@ -25,6 +26,7 @@ debloatmail-auth = { path = "crates/auth" }
 debloatmail-engine = { path = "crates/engine" }
 debloatmail-sync = { path = "crates/sync" }
 debloatmail-ffi = { path = "crates/ffi" }
+debloatmail-cli = { path = "crates/cli" }
 rusqlite = { version = "0.41.1", features = ["bundled"] }
 thiserror = "2.0.21"
 mail-parser = "1.0.0"
@@ -50,4 +52,14 @@ async-trait = "0.1.92"
 tempfile = "3.27.0"
 chrono = { version = "0.4.45", default-features = false, features = ["std", "clock"] }
 base64 = "0.22.1"
+clap = { version = "4.5.64", features = ["derive", "env"] }
+clap_complete = "4.5.64"
+clap_mangen = "0.2.33"
+toml = "1.2.0"
+anyhow = "1.0.104"
+anstream = "1.0.0"
+anstyle = "1.0.14"
+rpassword = "7.5.4"
+assert_cmd = "2.2.2"
+predicates = "3.1.4"
 
