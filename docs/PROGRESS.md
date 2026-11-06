@@ -1,8 +1,8 @@
 # Implementation Progress
 
-## Current Status: Phase 2A, 2B, 2C, & 2D Complete; Toolchain & Dependencies Modernized
+## Current Status: Phase 3A Complete (`crates/ffi` Engine Traits & Dual Transports)
 
-Phase 1 (`core` + `store`), **Phase 2A (`crates/extract` + MIME fixtures & determinism)**, **Phase 2B (`crates/feeds`)**, **Phase 2C (`crates/auth` + `crates/engine`)**, and **Phase 2D (`crates/sync` + `store` blob/thread/header helpers + `feeds` SSRF redirect hook)** are complete. Workspace dependencies and toolchains were modernized to Rust 1.99.1 (Edition 2024), `mail-parser 1.0.0`, and `rusqlite 0.41.1`. All 100 workspace tests pass, `cargo clippy` runs with zero warnings across all targets, `cargo deny` passes advisories/bans/licenses/sources, and `scripts/check-invariants.sh` exits cleanly with code 0.
+Phase 1 (`core` + `store`), **Phase 2A (`crates/extract` + MIME fixtures & determinism)**, **Phase 2B (`crates/feeds`)**, **Phase 2C (`crates/auth` + `crates/engine`)**, **Phase 2D (`crates/sync` + `store` blob/thread/header helpers + `feeds` SSRF redirect hook)**, and **Phase 3A (`crates/ffi` Qt-free engine trait, standalone flock, `InProcessEngine`, `DbusEngine`, and dual-transport parity)** are complete. Workspace dependencies and toolchains are pinned to Rust 1.99.1 (Edition 2024), `mail-parser 1.0.0`, `rusqlite 0.41.1`, and `zbus 5.19.0`. All 112 workspace tests pass, `cargo clippy` runs with zero warnings across all targets, `cargo deny` passes advisories/bans/licenses/sources, and `scripts/check-invariants.sh` exits cleanly with code 0.
 
 ---
 
@@ -65,12 +65,13 @@ Phase 1 (`core` + `store`), **Phase 2A (`crates/extract` + MIME fixtures & deter
 
 ### 2. Workspace Verification
 
-- **Tests**: `cargo test --workspace --all-targets` passes all 100 tests:
+- **Tests**: `cargo test --workspace --all-targets` passes all 112 tests:
   - `debloatmail-auth`: 6 unit tests
   - `debloatmail-core`: 9 unit tests
   - `debloatmail-engine`: 23 unit tests
   - `debloatmail-extract`: 33 unit tests + 3 integration tests (`determinism`)
   - `debloatmail-feeds`: 1 unit test + 5 integration tests
+  - `debloatmail-ffi`: 8 unit tests + 4 integration tests (`dual_transport`)
   - `debloatmail-store`: 8 unit tests
   - `debloatmail-sync`: 12 unit & scenario integration tests
 - **Clippy**: `cargo clippy --workspace --all-targets -- -D warnings` passes cleanly (0 warnings).
@@ -145,13 +146,43 @@ Phase 1 (`core` + `store`), **Phase 2A (`crates/extract` + MIME fixtures & deter
 - **`data/org.noahie.debloatmail.metainfo.xml`** created with `<project_license>MIT</project_license>` and basic AppStream metadata.
 - Fixed pre-existing bug: `reqwest` feature flag renamed from `rustls-tls` to `rustls` in reqwest 0.13.
 
-### 9. Upcoming Phases
+### 9. Completed Phase 3A: Engine Boundary & Dual Transports (`crates/ffi`)
 
-#### Phase 3 – Engine Boundary & CLI Validation Spike (`crates/ffi` & `crates/cli`)
-- Define the Qt-free `Engine` trait and transport boundary in `crates/ffi`.
-- Build `crates/cli` (`debloatmailctl`) as the first consumer of the engine.
-- Demonstrate full end‑to‑end flow: authentication, sync, send queue, feed ingest, MIME extraction, and FTS5 search.
-- Ensure the CLI works before any QML UI is introduced.
+- **Qt-Free Engine Traits (`traits.rs`)**:
+  - Defined `EngineReads` (synchronous direct SQLite WAL queries), `EngineMutations` (asynchronous state modifications and job triggering), and blanket `Engine` trait (`EngineReads + EngineMutations`).
+  - Strict adherence to workspace invariants: zero Qt / cxx-qt imports, zero external dependencies in `crates/core`, transfer types strictly mapped.
+- **Standalone File Locking (`lock.rs`)**:
+  - Implemented `StandaloneLock` via `libc::flock` (exclusive non-blocking `LOCK_EX | LOCK_NB`) on `$XDG_STATE_HOME/debloatmail/debloatmail-standalone.lock`.
+  - Records process PID into the lockfile for clear diagnostics and surfaces `FfiError::LockHeld { path, pid }` on contention.
+- **In-Process Engine (`in_process.rs`)**:
+  - Standalone engine implementation supporting `--no-daemon` CLI and future Android target.
+  - Connects directly to SQLite with WAL, in-memory or keyring `SecretStore`, and `ReqwestFeedFetcher`.
+- **D-Bus Engine Adapter (`dbus.rs`)**:
+  - Proxy client adapter communicating with `org.noahie.debloatmail.Daemon` using `zbus 5.19`.
+  - Implements `ItemsProxy`, `SyncProxy`, `AccountsProxy`, `FeedsProxy`, `ComposeProxy`, `QueueProxy`, and `StatusProxy`.
+  - Translates D-Bus error names (`NotFound`, `InvalidArgument`, `Unsupported`, `ServiceUnknown`, `NameHasNoOwner`) into unified `FfiError` variants.
+- **Shared SQLite WAL Reader (`reader.rs`)**:
+  - Shared query layer for stream pagination, threads, full item detail, account/folder/feed listings, search, and queue status.
+  - Guarantees 100% read parity across both standalone and daemon-backed executions without serializing large item sets across D-Bus.
+- **Dual-Transport Integration Testing (`tests/dual_transport.rs`)**:
+  - Verified exact read parity between `InProcessEngine` and `DbusEngine` on seeded data.
+  - Verified standalone advisory file lock mutual exclusion and PID reporting across concurrent runs.
+  - Verified thread-safe dynamic trait boundary (`Box<dyn Engine> + Send + Sync`).
+
+---
+
+### 10. Upcoming Phases
+
+#### Phase 3B – CLI Read Surface (`crates/cli`)
+- Implement read commands in `debloatmailctl`: `list`, `read`, `search`, `threads`, `accounts`, `folders`, `feeds`, `status`.
+- Support `--json`, `--plain`, and `--no-daemon` flags.
+
+#### Phase 3C – CLI Write & Action Surface (`crates/cli`)
+- Implement mutation commands: `mail mark-read`, `mail star`, `mail move`, `mail copy`, `mail delete`, `feed add`, `feed remove`, `feed refresh`, `account add`, `account check`, `compose send`, `sync`, `daemon status`.
+
+#### Phase 3D – Golden CLI Tests & Week-One Validation Spike
+- CLI golden test harness matching `docs/debloatmailctl.md`.
+- End-to-end integration test validating offline/online operation, feed ingestion, and FTS5 search.
 
 #### Phase 4 – Daemon & D‑Bus (`debloatmaild`)
 - Implement the sole SQLite writer process, background sync scheduler, tray integration, and desktop notifications.
