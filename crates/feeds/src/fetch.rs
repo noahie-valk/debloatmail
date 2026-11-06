@@ -45,6 +45,8 @@ pub enum FetchError {
     HtmlContent,
     #[error("Body exceeds size limit of 10 MiB")]
     BodyTooLarge,
+    #[error("Request timed out")]
+    Timeout,
 }
 
 impl FetchError {
@@ -64,6 +66,7 @@ impl FetchError {
     /// Returns `true` if the underlying error was a request timeout (`SYNC.md` §7.4).
     pub fn is_timeout(&self) -> bool {
         match self {
+            Self::Timeout => true,
             Self::Http(e) => e.is_timeout(),
             _ => false,
         }
@@ -212,10 +215,7 @@ pub async fn fetch_feed_with_timeout(
     let client = reqwest::Client::builder()
         .redirect(reqwest::redirect::Policy::custom(move |attempt| {
             let hop_count = attempt.previous().len();
-            let initial_url = attempt
-                .previous()
-                .first()
-                .unwrap_or_else(|| attempt.url());
+            let initial_url = attempt.previous().first().unwrap_or_else(|| attempt.url());
             let target_url = attempt.url();
 
             if let Err(violation) = validate_redirect_target(initial_url, target_url, hop_count) {
@@ -321,7 +321,11 @@ pub async fn fetch_feed_with_timeout(
 
     // Handle HTML content type early.
     if let Some(ct) = resp.headers().get(CONTENT_TYPE)
-        && ct.to_str().unwrap_or("").to_ascii_lowercase().contains("text/html")
+        && ct
+            .to_str()
+            .unwrap_or("")
+            .to_ascii_lowercase()
+            .contains("text/html")
     {
         return Err(FetchError::HtmlContent);
     }
@@ -387,7 +391,6 @@ mod tests {
         let private_target = reqwest::Url::parse("https://192.168.1.1/router.xml").unwrap();
         let link_local_target =
             reqwest::Url::parse("http://169.254.169.254/latest/meta-data/").unwrap();
-
 
         // Valid HTTPS -> HTTPS redirect within hop limit
         assert!(validate_redirect_target(&public_https, &public_https_2, 1).is_ok());

@@ -87,10 +87,7 @@ pub async fn poll_feed(conn: &Connection, feed_id: i64) -> Result<(), PollError>
     for entry in parsed.entries {
         let effective_guid = entry.guid.as_deref().or(entry.link.as_deref());
         let public_id = uuid::Uuid::new_v4().to_string();
-        let sort_at = entry
-            .published_at
-            .or(entry.updated_at)
-            .unwrap_or(now);
+        let sort_at = entry.published_at.or(entry.updated_at).unwrap_or(now);
 
         let upsert = UpsertFeedItem {
             feed_id,
