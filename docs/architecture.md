@@ -381,7 +381,9 @@ value (see §6).
   real-world samples over synthetic ones.
 - IMAP tests run against a local GreenMail/Dovecot in `tests/imap/`. **Never hit live
   providers in tests.** Feed tests use recorded HTTP responses (conditional-GET
-  200/304/404/500, malformed XML, HTML served as a feed).
+  200/304/404/500, malformed XML, HTML served as a feed.) (Probing a live provider is a separate instrument with its own accounts, guard,
+  and recording: `PROBES.md`. It exists to supply the real-world fixtures this
+  section prefers, not to replace them.)
 - Never commit credentials, tokens, or real email/feed data into fixtures.
 
 **CI should enforce the invariants, not just the tests:** assert that
