@@ -1,0 +1,168 @@
+# .github/workflows/probe.yml
+#
+# Live-provider probes — docs/PROBES.md. Deliberately hard to run:
+# manual dispatch only, main only, behind the `probe` environment with
+# required reviewers, and with no credential at all unless `live` is true.
+#
+# This workflow is NOT a required status check and must never become one
+# (PROBES.md §2, invariant 5).
+
+name: probe
+
+on:
+  workflow_dispatch:
+    inputs:
+      live:
+        description: "Run against live providers (needs probe environment approval)"
+        type: boolean
+        default: false
+      provider:
+        description: "Provider key, docs/PROBES.md §10"
+        type: choice
+        options: [none, fastmail, gmail, icloud, proton, dovecot, feeds]
+        default: none
+      case:
+        description: "Case name, docs/PROBES.md §9"
+        type: string
+        default: ""
+      budget:
+        description: "Wall-clock budget (PROBES.md §6)"
+        type: choice
+        options: ["5m", "10m"]
+        default: "5m"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: probe-${{ inputs.provider || 'none' }}
+  # Never cancel: a run mutates a real account and must reach teardown.
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+  PROBE_ACCOUNT: probe-${{ inputs.provider || 'none' }}
+
+jobs:
+  # Always runs. No secrets, no network beyond crates.io. This is the only
+  # part of the workflow an ordinary contributor can exercise.
+  offline:
+    name: harness + recorded corpus
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pinned toolchain
+        run: |
+          rustup toolchain install --profile minimal
+          rustup show active-toolchain
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: probe
+      - name: build harness
+        run: cargo build --locked -p debloatmail-probe
+      - name: sanitizer gate (docs/PROBES.md §8)
+        run: bash scripts/check-captures.sh
+      - name: replay committed captures with no network
+        # PROBES.md §16: a recorded capture must replay offline.
+        run: cargo test --locked -p debloatmail-probe --test corpus -- --nocapture
+      - name: plan (opens no socket)
+        if: inputs.provider != 'none' && inputs.case != ''
+        run: |
+          ./target/debug/debloatmail-probe plan \
+            --provider "${{ inputs.provider }}" \
+            --case "${{ inputs.case }}"
+
+  # The only job that sees a credential. Every guard here is deliberate.
+  live:
+    name: live probe (${{ inputs.provider }})
+    needs: offline
+    if: |
+      inputs.live == true &&
+      inputs.provider != 'none' &&
+      inputs.case != '' &&
+      github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: probe
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # A probe job should not leave a token in .git/config.
+          persist-credentials: false
+      - name: Install pinned toolchain
+        run: |
+          rustup toolchain install --profile minimal
+          rustup show active-toolchain
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: probe
+      - name: build harness
+        run: cargo build --locked -p debloatmail-probe
+
+      - name: Unlock an ephemeral keyring
+        # SECURITY.md §9.1/§9.3: the secret lives in the keyring, not in a file.
+        # This daemon exists only for the life of the job.
+        env:
+          KEYRING_PASSPHRASE: ${{ secrets.PROBE_KEYRING_PASSPHRASE }}
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq gnome-keyring dbus-x11
+          eval "$(dbus-launch --sh-syntax)"
+          echo "DBUS_SESSION_BUS_ADDRESS=$DBUS_SESSION_BUS_ADDRESS" >> "$GITHUB_ENV"
+          printf '%s' "$KEYRING_PASSPHRASE" \
+            | gnome-keyring-daemon --unlock --components=secrets --replace \
+            > "$RUNNER_TEMP/keyring.env"
+          cat "$RUNNER_TEMP/keyring.env" >> "$GITHUB_ENV"
+
+      - name: Load probe credential into the keyring
+        # stdin only — never argv (SECURITY.md §7.3).
+        env:
+          PROBE_SECRET: ${{ secrets.PROBE_SECRET }}
+        run: |
+          printf '%s' "$PROBE_SECRET" \
+            | ./target/debug/debloatmail-probe auth import \
+                --account "$PROBE_ACCOUNT" --secret-stdin
+
+      - name: Run probe
+        run: |
+          ./target/debug/debloatmail-probe run \
+            --provider "${{ inputs.provider }}" \
+            --case "${{ inputs.case }}" \
+            --account "$PROBE_ACCOUNT" \
+            --budget "${{ inputs.budget }}" \
+            --record \
+            --out "$RUNNER_TEMP/captures"
+
+      - name: Sanitizer gate on the new capture
+        if: always()
+        run: |
+          if [ -d "$RUNNER_TEMP/captures" ]; then
+            ./target/debug/debloatmail-probe sanitize --check "$RUNNER_TEMP/captures"
+          fi
+
+      - name: Verify teardown
+        if: always()
+        run: |
+          ./target/debug/debloatmail-probe verify-teardown \
+            --account "$PROBE_ACCOUNT" --run-id "${GITHUB_RUN_ID}"
+
+      - name: Purge credential and assert the keyring entry is gone
+        # PROBES.md §14: an orphaned probe credential is the leak this exists to stop.
+        if: always()
+        run: |
+          ./target/debug/debloatmail-probe auth forget --account "$PROBE_ACCOUNT"
+          ./target/debug/debloatmail-probe auth assert-empty --service debloatmail-probe
+
+      - name: Wipe the probe database
+        if: always()
+        run: rm -rf "${XDG_STATE_HOME:-$HOME/.local/state}/debloatmail-probe" "$RUNNER_TEMP/captures/raw"
+
+      - name: Upload sanitized capture
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: capture-${{ inputs.provider }}-${{ github.run_id }}
+          path: ${{ runner.temp }}/captures
+          retention-days: 7
+          if-no-files-found: warn
