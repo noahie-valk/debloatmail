@@ -887,3 +887,16 @@ Each item is a test or a CI assertion, not a review note.
 - [ ] `SECURITY.md` (repo root) and `security.txt` exist and name a disclosure contact;
       this document's filename does not collide with them (the rename decision lands in
       the repo pass, §14).
+- [ ] `ProbeScope` refuses a `SELECT` of any folder outside the session's single-entry
+allowlist, and refuses `APPEND`, `STORE`, `MOVE` and `EXPUNGE` while the session is
+read-only — asserted as a rejected call **before the coroutine is pumped**, with an empty
+outbound buffer, because a guard checked at the harness is a guard the harness can skip
+(`PROBES.md` §6).
+- [ ] The capture writer and the `--debug` trace share one redaction pass, and
+`sanitize --check` fails a capture containing an address outside `example.*` / `*.invalid`,
+a base64 run over 64 KiB, or a high-entropy string over 40 characters (`PROBES.md` §8).
+- [ ] No committed capture under `tests/imap/recorded/` contains a real address, domain,
+subject, or body: every recording is machine-checked against the reserved-name allowlist
+before it can be committed, and the sanitizer is a fallback for accidents rather than a
+licence to record real mail (`PROBES.md` §8, §14).
+
