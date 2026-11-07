@@ -1133,6 +1133,12 @@ load-bearing, not decorative.
 line is the fix — an account with an IDLE watch holds two connections by design, and
 steady state is the table above.)*
 
+*(Not exempt. `PROBES.md` §11 holds a probe to every value here, or below it, and
+adds a hard time, token, and byte budget on top. It is tighter where it matters: one
+connection even on a watched account, and 200 UIDs per header fetch instead of
+2,000. The harness is where these limits first meet a real server, so it is the last
+place to relax them.)*
+
 **We do not fetch a feed we were not subscribed to, and we do not fetch linked
 pages.** Summary-only feeds are an open question (DATA-MODEL §15.2, this document
 §16.2) and the current answer is no — which means the daemon makes exactly one
