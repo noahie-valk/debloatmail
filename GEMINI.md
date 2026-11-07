@@ -25,6 +25,7 @@ Do not read all of `docs/`. Read only the doc and section for the task at hand.
 | CLI commands and output | `docs/debloatmailctl.md` |
 | Threat model, security rules | `docs/SECURITY.md` |
 | UI | `docs/UI.md` |
+| Live-provider probing, recorded corpora | `docs/PROBES.md` |
 | Terms | `docs/GLOSSARY.md` |
 
 If code and a doc disagree, or two docs disagree, stop and ask. Do not pick silently.
@@ -59,6 +60,7 @@ If code and a doc disagree, or two docs disagree, stop and ask. Do not pick sile
 - Unit tests beside the code; integration tests in `tests/`.
 - Fixtures in `tests/fixtures/` (malformed MIME, broken feeds, odd charsets). Prefer real-world samples over synthetic ones.
 - IMAP tests run against local GreenMail/Dovecot in `tests/imap/`. Feed tests use recorded HTTP responses. Never hit live providers.
+- Live-provider work is a probe, not a test: `docs/PROBES.md`. A probe never gates a merge; its sanitized capture becomes the fixture the bullets above ask for.
 - `core` and `extract` must be testable with no network at all.
 - CI asserts the invariants: `core` has zero deps; no Qt outside `ui/bridge`; `ffi` is Qt-free; `extract` has no runtime or I/O deps; the `ffi` suite passes on both transports (D-Bus and in-process).
 
@@ -69,8 +71,10 @@ If code and a doc disagree, or two docs disagree, stop and ask. Do not pick sile
 - Ask first: changing the SQLite schema or migrations (authoritative DDL: `DATA-MODEL.md` §5).
 - Ask first: adding a Qt type outside `ui/bridge`.
 - Ask first: implementing OAuth (deferred until engine + UI skeleton are done).
+- Ask first: adding a provider or case to `PROBES.md` §10.
 - Never: use `io-email` (frozen) or `io-keyring` (deprecated).
 - Never: open HTTP or TLS outside `crates/feeds` (no `ureq`, direct `hyper`, or curl shims).
 - Never: add a WebView, HTML renderer, or calendar/contacts code.
-- Never: commit credentials, tokens, or real email/feed data into `tests/fixtures/`.
+- Never: commit credentials, tokens, or real email/feed data into `tests/fixtures/`, and never commit an unsanitized capture into `tests/imap/recorded/`.
+- Never: run a probe against a personal or third-party mailbox, or with write scope outside the folder that run created.
 - Never: modify or delete an existing test, or weaken an assertion, to make it pass.
