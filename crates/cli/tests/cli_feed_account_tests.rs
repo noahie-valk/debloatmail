@@ -87,6 +87,23 @@ fn test_cli_account_management() {
         .unwrap();
     assert_eq!(email, "alice@work.com");
 
+    // Verify account list without --redact shows full email
+    let mut cmd_list_plain = cmd_with_env(&tmp, &db_path);
+    cmd_list_plain.args(["--format", "plain", "account", "list"]);
+    cmd_list_plain
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("alice@work.com"));
+
+    // Verify account list with --redact masks email
+    let mut cmd_list_redacted = cmd_with_env(&tmp, &db_path);
+    cmd_list_redacted.args(["--redact", "--format", "plain", "account", "list"]);
+    cmd_list_redacted
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("a***e@work.com"))
+        .stdout(predicate::str::contains("alice@work.com").not());
+
     // 3. Update account --disable
     let mut cmd_up_dis = cmd_with_env(&tmp, &db_path);
     cmd_up_dis.args(["account", "update", "work", "--disable"]);

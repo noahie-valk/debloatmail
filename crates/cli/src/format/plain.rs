@@ -60,6 +60,27 @@ pub fn print_feeds_plain(feeds: &[FfiFeed]) -> Result<(), CliError> {
     Ok(())
 }
 
+/// Masks an email address for privacy (e.g., `alice.smith@example.com` -> `a***h@example.com`).
+pub fn mask_email(email: &str) -> String {
+    let parts: Vec<&str> = email.splitn(2, '@').collect();
+    if parts.len() != 2 || parts[0].is_empty() {
+        return "***".to_string();
+    }
+
+    let local = parts[0];
+    let domain = parts[1];
+
+    let chars: Vec<char> = local.chars().collect();
+    let masked_local = match chars.len() {
+        0 => "***".to_string(),
+        1 => format!("{}***", chars[0]),
+        2 => format!("{}*{}", chars[0], chars[1]),
+        _ => format!("{}***{}", chars[0], chars[chars.len() - 1]),
+    };
+
+    format!("{masked_local}@{domain}")
+}
+
 pub fn print_accounts_plain(accounts: &[FfiAccount]) -> Result<(), CliError> {
     for a in accounts {
         println!(
@@ -68,4 +89,18 @@ pub fn print_accounts_plain(accounts: &[FfiAccount]) -> Result<(), CliError> {
         );
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_mask_email() {
+        assert_eq!(mask_email("alice.smith@example.com"), "a***h@example.com");
+        assert_eq!(mask_email("me@fastmail.com"), "m*e@fastmail.com");
+        assert_eq!(mask_email("a@b.com"), "a***@b.com");
+        assert_eq!(mask_email("invalid"), "***");
+        assert_eq!(mask_email("@nodomain.com"), "***");
+    }
 }

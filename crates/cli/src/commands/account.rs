@@ -11,6 +11,7 @@ use crate::error::CliError;
 use crate::executor::{confirm_destructive, ensure_online, init_engine};
 use crate::format::format_accounts;
 use crate::format::json::print_single_json;
+use crate::format::plain::mask_email;
 use crate::resolve::resolve_account;
 
 pub async fn execute_account(
@@ -21,7 +22,14 @@ pub async fn execute_account(
 ) -> Result<(), CliError> {
     match &args.command {
         AccountCommands::List { json } => {
-            let accounts = list_accounts_fn(conn)?;
+            let mut accounts = list_accounts_fn(conn)?;
+            if cli.redact {
+                for a in &mut accounts {
+                    if !a.email.is_empty() {
+                        a.email = mask_email(&a.email);
+                    }
+                }
+            }
             let format = if *json {
                 OutputFormat::Json
             } else {
@@ -30,7 +38,10 @@ pub async fn execute_account(
             format_accounts(&accounts, format)
         }
         AccountCommands::Show { name_or_id } => {
-            let account = resolve_account(conn, name_or_id)?;
+            let mut account = resolve_account(conn, name_or_id)?;
+            if cli.redact && !account.email.is_empty() {
+                account.email = mask_email(&account.email);
+            }
 
             match cli.format {
                 OutputFormat::Json | OutputFormat::Jsonl => print_single_json(&account)?,

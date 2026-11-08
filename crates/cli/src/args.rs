@@ -67,6 +67,10 @@ pub struct Cli {
     #[arg(long, global = true)]
     pub dry_run: bool,
 
+    /// Redact / mask sensitive information (such as email addresses) from output.
+    #[arg(long, global = true)]
+    pub redact: bool,
+
     #[command(subcommand)]
     pub command: Commands,
 }
