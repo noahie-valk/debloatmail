@@ -30,7 +30,7 @@ while IFS= read -r -d '' f; do
     | sort -u | head -3 || true)
   if [ -n "$offenders" ]; then
     note "non-reserved address in ${f#"$PWD"/}:"
-    printf '  %s\n' $offenders >&2
+    printf '  %s\n' "$offenders" >&2
   fi
 done < <(find "$root" -type f -not -name '*.md' -print0)
 
